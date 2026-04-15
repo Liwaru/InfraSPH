@@ -196,35 +196,51 @@ class Control extends Controller
             ],
         ]);
 
-        return redirect()->route('home');
+        return redirect()->route('dashboard');
     }
 
     /**
-     * Display the home page after login.
+     * Display the dashboard page after login.
      */
-    public function home(): View|RedirectResponse
+    public function dashboard(): View|RedirectResponse
     {
         if (! session('logged_in')) {
             return redirect()->route('login');
         }
 
         $user = session('user');
-        $level = (int) ($user['level'] ?? 0);
-        $dashboard = self::DASHBOARD_BY_LEVEL[$level] ?? [
-            'role_name' => 'Pengguna',
-            'headline' => 'Dashboard belum tersedia untuk level ini.',
-            'summary_cards' => [],
-            'quick_actions' => [],
-            'panels' => [],
-        ];
+        $dashboard = $this->resolveDashboardData($user);
 
-        if ($level === 1) {
-            $dashboard = $this->buildLevelOneDashboard($user, $dashboard);
-        }
-
-        return view('home', [
+        return view('dashboard', [
             'user' => $user,
             'dashboard' => $dashboard,
+        ]);
+    }
+
+    public function classInventory(): View|RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+        $level = (int) ($user['level'] ?? 0);
+
+        if (! in_array($level, [1, 2], true)) {
+            return redirect()->route('dashboard');
+        }
+
+        $assignments = $this->getActiveAssignmentsForUser($user);
+        $roomIds = $assignments->pluck('id_ruangan')->map(fn ($value) => (int) $value)->all();
+        $inventoryRows = $this->getInventoryRowsForRooms($roomIds);
+        $inventoryByRoom = $inventoryRows->groupBy('id_ruangan');
+        $dashboard = $this->resolveDashboardData($user);
+
+        return view('class-inventory', [
+            'user' => $user,
+            'dashboard' => $dashboard,
+            'assignments' => $assignments,
+            'inventoryByRoom' => $inventoryByRoom,
         ]);
     }
 
@@ -237,13 +253,7 @@ class Control extends Controller
      */
     private function buildLevelOneDashboard(array $user, array $dashboard): array
     {
-        $assignment = DB::table('penugasan_ruangan as pr')
-            ->join('ruangan as r', 'r.id_ruangan', '=', 'pr.id_ruangan')
-            ->where('pr.id_user', $user['id_user'])
-            ->where('pr.status', 'aktif')
-            ->orderByDesc('pr.id_penugasan_ruangan')
-            ->select('pr.id_ruangan', 'pr.peran_ruangan', 'r.nama_ruangan', 'r.kode_ruangan', 'r.jenis_ruangan')
-            ->first();
+        $assignment = $this->getActiveAssignmentsForUser($user)->sortByDesc('id_penugasan_ruangan')->first();
 
         if (! $assignment) {
             $dashboard['headline'] = 'Akunmu belum terhubung ke ruangan. Hubungi superadmin untuk menambahkan penugasan ruangan.';
@@ -311,6 +321,78 @@ class Control extends Controller
             : ['Belum ada pengajuan yang tercatat untuk ruangan ini.'];
 
         return $dashboard;
+    }
+
+    /**
+     * @param  array<string, mixed>  $user
+     * @return array<string, mixed>
+     */
+    private function resolveDashboardData(array $user): array
+    {
+        $level = (int) ($user['level'] ?? 0);
+        $dashboard = self::DASHBOARD_BY_LEVEL[$level] ?? [
+            'role_name' => 'Pengguna',
+            'headline' => 'Dashboard belum tersedia untuk level ini.',
+            'summary_cards' => [],
+            'quick_actions' => [],
+            'panels' => [],
+        ];
+
+        if ($level === 1) {
+            return $this->buildLevelOneDashboard($user, $dashboard);
+        }
+
+        return $dashboard;
+    }
+
+    /**
+     * @param  array<string, mixed>  $user
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private function getActiveAssignmentsForUser(array $user)
+    {
+        return DB::table('penugasan_ruangan as pr')
+            ->join('ruangan as r', 'r.id_ruangan', '=', 'pr.id_ruangan')
+            ->where('pr.id_user', $user['id_user'])
+            ->where('pr.status', 'aktif')
+            ->orderBy('r.nama_ruangan')
+            ->select(
+                'pr.id_penugasan_ruangan',
+                'pr.id_ruangan',
+                'pr.peran_ruangan',
+                'r.nama_ruangan',
+                'r.kode_ruangan',
+                'r.jenis_ruangan'
+            )
+            ->get();
+    }
+
+    /**
+     * @param  array<int, int>  $roomIds
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private function getInventoryRowsForRooms(array $roomIds)
+    {
+        if ($roomIds === []) {
+            return collect();
+        }
+
+        return DB::table('inventaris_ruangan as ir')
+            ->join('barang as b', 'b.id_barang', '=', 'ir.id_barang')
+            ->join('ruangan as r', 'r.id_ruangan', '=', 'ir.id_ruangan')
+            ->whereIn('ir.id_ruangan', $roomIds)
+            ->orderBy('r.nama_ruangan')
+            ->orderBy('b.nama_barang')
+            ->get([
+                'ir.id_ruangan',
+                'r.nama_ruangan',
+                'r.kode_ruangan',
+                'b.nama_barang',
+                'b.satuan',
+                'ir.jumlah_baik',
+                'ir.jumlah_rusak',
+                'ir.keterangan',
+            ]);
     }
 
     /**

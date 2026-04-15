@@ -1,9 +1,9 @@
 <aside class="sidebar">
     <div class="sidebar-brand">
-        <a class="sidebar-brand-link" href="{{ route('home') }}">
+        <a class="sidebar-brand-link" href="{{ route('dashboard') }}">
             <span class="sidebar-brand-main">
                 <span class="sidebar-brand-logo">
-                    <img src="{{ asset('images/Infrasph oren.png') }}" alt="Logo InfraSPH">
+                    <img src="{{ asset('images/Infrasph.png') }}" alt="Logo InfraSPH">
                 </span>
                 <span class="sidebar-brand-text">InfraSPH</span>
             </span>
@@ -25,40 +25,39 @@
 
     @php
         $level = (int) ($user['level'] ?? 0);
+        $safeRoute = static function (string $name): string {
+            return \Illuminate\Support\Facades\Route::has($name) ? route($name) : '#';
+        };
         $menuByLevel = [
             1 => [
-                ['label' => 'kelas Saya', 'icon' => 'bi bi-door-open-fill', 'url' => '#'],
-                ['label' => 'Inventaris Saya', 'icon' => 'bi bi-box-seam-fill', 'url' => '#'],
-                ['label' => 'Ajukan Permintaan', 'icon' => 'bi bi-send-plus-fill', 'url' => '#'],
-                ['label' => 'Riwayat Pengajuan', 'icon' => 'bi bi-clock-history', 'url' => '#'],
-                ['label' => 'Customer Service', 'icon' => 'bi bi-headset', 'url' => '#'],
-
+                ['label' => 'Kelas Saya', 'icon' => 'bi bi-door-open-fill', 'url' => $safeRoute('class.room')],
+                ['label' => 'Ajukan Permintaan', 'icon' => 'bi bi-send-plus-fill', 'url' => $safeRoute('requests.create')],
+                ['label' => 'Riwayat Pengajuan', 'icon' => 'bi bi-clock-history', 'url' => $safeRoute('requests.history')],
             ],
             2 => [
-                ['label' => 'Ruangan Tugas', 'icon' => 'bi bi-building', 'url' => '#'],
-                ['label' => 'Inventaris Kelas', 'icon' => 'bi bi-box-seam-fill', 'url' => '#'],
-                ['label' => 'Pengajuan Masuk', 'icon' => 'bi bi-inbox-fill', 'url' => '#'],
-                ['label' => 'Customer Service', 'icon' => 'bi bi-headset', 'url' => '#'],
-                ['label' => 'Riwayat Verifikasi', 'icon' => 'bi bi-patch-check-fill', 'url' => '#'],
+                ['label' => 'Kelas Binaan', 'icon' => 'bi bi-building', 'url' => $safeRoute('admin.classroom')],
+                ['label' => 'Pengajuan Masuk', 'icon' => 'bi bi-inbox-fill', 'url' => $safeRoute('admin.requests.inbox')],
+                ['label' => 'Riwayat Verifikasi', 'icon' => 'bi bi-patch-check-fill', 'url' => $safeRoute('admin.requests.history')],
             ],
             3 => [
-                ['label' => 'Semua Ruangan', 'icon' => 'bi bi-buildings-fill', 'url' => '#'],
-                ['label' => 'Inventaris Sekolah', 'icon' => 'bi bi-boxes', 'url' => '#'],
-                ['label' => 'Persetujuan Akhir', 'icon' => 'bi bi-clipboard2-check-fill', 'url' => '#'],
-                ['label' => 'Asisten Sistem', 'icon' => 'bi bi-robot', 'url' => '#'],
-                ['label' => 'Laporan', 'icon' => 'bi bi-bar-chart-fill', 'url' => '#'],
+                ['label' => 'Data User', 'icon' => 'bi bi-people-fill', 'url' => $safeRoute('superadmin.users')],
+                ['label' => 'Data Ruangan', 'icon' => 'bi bi-building-fill-gear', 'url' => $safeRoute('superadmin.rooms')],
+                ['label' => 'Data Barang', 'icon' => 'bi bi-grid-fill', 'url' => $safeRoute('superadmin.items')],
+                ['label' => 'Data Inventaris', 'icon' => 'bi bi-box-seam-fill', 'url' => $safeRoute('superadmin.inventories')],
+                ['label' => 'Realisasi Pengajuan', 'icon' => 'bi bi-list-check', 'url' => $safeRoute('superadmin.requests.realization')],
+                ['label' => 'Asisten Sistem', 'icon' => 'bi bi-robot', 'url' => $safeRoute('assistant.index')],
+                ['label' => 'Laporan', 'icon' => 'bi bi-bar-chart-line-fill', 'url' => $safeRoute('superadmin.reports')],
             ],
             4 => [
-                ['label' => 'Data User', 'icon' => 'bi bi-people-fill', 'url' => '#'],
-                ['label' => 'Data Ruangan', 'icon' => 'bi bi-building-fill-gear', 'url' => '#'],
-                ['label' => 'Data Inventaris', 'icon' => 'bi bi-box-seam-fill', 'url' => '#'],
-                ['label' => 'Realisasi Pengajuan', 'icon' => 'bi bi-list-check', 'url' => '#'],
-                ['label' => 'Asisten Sistem', 'icon' => 'bi bi-robot', 'url' => '#'],
-                ['label' => 'Laporan', 'icon' => 'bi bi-bar-chart-line-fill', 'url' => '#'],
+                ['label' => 'Semua Ruangan', 'icon' => 'bi bi-buildings-fill', 'url' => $safeRoute('owner.rooms')],
+                ['label' => 'Inventaris Sekolah', 'icon' => 'bi bi-boxes', 'url' => $safeRoute('owner.inventories')],
+                ['label' => 'Persetujuan Akhir', 'icon' => 'bi bi-clipboard2-check-fill', 'url' => $safeRoute('owner.requests.approval')],
+                ['label' => 'Asisten Sistem', 'icon' => 'bi bi-robot', 'url' => $safeRoute('assistant.index')],
+                ['label' => 'Laporan', 'icon' => 'bi bi-bar-chart-fill', 'url' => $safeRoute('owner.reports')],
             ],
         ];
         $menus = $menuByLevel[$level] ?? [
-            ['label' => 'Dashboard', 'icon' => 'bi bi-grid-1x2-fill', 'url' => route('home')],
+            ['label' => 'Dashboard', 'icon' => 'bi bi-grid-1x2-fill', 'url' => route('dashboard')],
         ];
     @endphp
 

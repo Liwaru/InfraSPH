@@ -17,12 +17,13 @@
         body {
             font-family: 'Inter', sans-serif;
             min-height: 100vh;
-            background: linear-gradient(135deg, #ff5900 0%, #ff5900 45%, #ff5900 100%);
+            background: linear-gradient(135deg, #ff5900 0%, #ff5900 42%, #ff5900 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 1.5rem;
             position: relative;
+            overflow-x: hidden;
         }
 
         /* background animasi lembut */
@@ -33,7 +34,9 @@
             left: -20%;
             width: 140%;
             height: 140%;
-            background: radial-gradient(circle, rgba(255, 110, 30, 0.12) 0%, rgba(255, 200, 150, 0) 70%);
+            background:
+                radial-gradient(circle at top left, rgba(255, 245, 236, 0.28) 0%, rgba(255, 245, 236, 0) 42%),
+                radial-gradient(circle at bottom right, rgba(255, 210, 180, 0.2) 0%, rgba(255, 210, 180, 0) 38%);
             pointer-events: none;
             animation: slowDrift 18s infinite alternate;
         }
@@ -67,13 +70,8 @@
             backdrop-filter: blur(2px);
             border-radius: 2rem;
             padding: 2rem 1.8rem 2.2rem;
-            box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.03);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1), 0 22px 50px -24px rgba(69, 28, 0, 0.34), 0 10px 25px -18px rgba(255, 106, 0, 0.28);
             border: 1px solid rgba(255, 255, 255, 0.7);
-            transition: box-shadow 0.2s;
-        }
-
-        .login-card:hover {
-            box-shadow: 0 30px 55px -15px rgba(249, 115, 22, 0.25);
         }
 
         /* header */
@@ -83,39 +81,31 @@
         }
 
         .brand-logo {
-            width: min(260px, 75%);
+            width: min(228px, 70%);
             height: auto;
             display: block;
-            margin: 0 auto 0.35rem;
+            margin: 0 auto 0.75rem;
             object-fit: contain;
         }
 
-        .logo-circle {
-            background: linear-gradient(135deg, #f97316, #fdba74);
-            width: 56px;
-            height: 56px;
-            border-radius: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 1rem;
-            box-shadow: 0 10px 15px -5px rgba(249, 115, 22, 0.3);
-        }
-
-        .logo-circle i {
-            font-size: 28px;
-            color: white;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-        }
-
-        h1 {
-            font-size: 1.9rem;
+        .hero-title {
+            font-size: clamp(2.1rem, 4vw, 2.6rem);
             font-weight: 800;
-            background: linear-gradient(135deg, #ea580c, #f97316);
+            background: linear-gradient(135deg, #f25500, #ff7c22);
             background-clip: text;
             -webkit-background-clip: text;
             color: transparent;
-            letter-spacing: -0.3px;
+            letter-spacing: -0.05em;
+            line-height: 1.14;
+            padding-bottom: 0.08em;
+        }
+
+        .hero-subtitle {
+            margin-top: 0.3rem;
+            font-size: 1.28rem;
+            font-weight: 700;
+            color: #8f5c45;
+            letter-spacing: 0.01em;
         }
 
         .sub-head {
@@ -180,18 +170,19 @@
             width: 100%;
             border: 1.5px solid #e9edf2;
             border-radius: 1.2rem;
-            background: #ffffff;
+            background: linear-gradient(180deg, #ffffff, #fffdfa);
             padding: 0.85rem 1rem;
             font-size: 0.95rem;
             font-family: 'Inter', monospace;
-            transition: all 0.2s ease;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
             outline: none;
             color: #0f172a;
         }
 
         .input-field:focus {
-            border-color: #f97316;
-            box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
+            border: 2px solid #ff6a00;
+            box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.2);
+            background: #ffffff;
         }
 
         /* password wrapper */
@@ -201,19 +192,25 @@
 
         .toggle-password {
             position: absolute;
-            right: 1rem;
+            right: 0.95rem;
             top: 50%;
             transform: translateY(-50%);
             background: none;
             border: none;
             color: #94a3b8;
             cursor: pointer;
-            font-size: 1rem;
-            transition: color 0.2s;
+            font-size: 1.12rem;
+            width: 2rem;
+            height: 2rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s ease, transform 0.2s ease;
         }
 
         .toggle-password:hover {
             color: #f97316;
+            transform: translateY(-50%) scale(1.05);
         }
 
         .validation-text {
@@ -247,8 +244,35 @@
         .checkbox-label input {
             width: 16px;
             height: 16px;
-            accent-color: #f97316;
+            appearance: none;
+            -webkit-appearance: none;
+            border: 1.6px solid #f97316;
+            border-radius: 4px;
+            background: #ffffff;
+            display: inline-grid;
+            place-content: center;
             cursor: pointer;
+            margin: 0;
+            flex-shrink: 0;
+        }
+
+        .checkbox-label input::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            background: #ffffff;
+            clip-path: polygon(14% 44%, 0 59%, 43% 100%, 100% 12%, 84% 0, 43% 62%);
+            transform: scale(0);
+            transition: transform 0.12s ease-in-out;
+        }
+
+        .checkbox-label input:checked {
+            background: #f97316;
+            border-color: #f97316;
+        }
+
+        .checkbox-label input:checked::before {
+            transform: scale(1);
         }
 
         .forgot-link {
@@ -289,12 +313,17 @@
 
         .login-btn:hover {
             background: linear-gradient(100deg, #ea580c, #f45c0c);
-            transform: scale(1.01);
-            box-shadow: 0 12px 20px -8px rgba(249, 115, 22, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.2), 0 10px 22px -12px rgba(249, 115, 22, 0.45);
         }
 
         .login-btn:active {
             transform: scale(0.98);
+        }
+
+        .login-btn:disabled {
+            cursor: wait;
+            opacity: 0.92;
         }
 
         /* footer tambahan */
@@ -320,11 +349,23 @@
         /* responsif */
         @media (max-width: 480px) {
             .login-card {
-                padding: 1.5rem;
+                padding: 1.35rem 1.15rem 1.45rem;
+                
             }
-            h1 {
-                font-size: 1.7rem;
+
+            .brand-logo {
+                width: min(188px, 66%);
+                margin-bottom: 0.6rem;
             }
+
+            .hero-title {
+                font-size: 1.9rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1.08rem;
+            }
+
             .options-row {
                 flex-wrap: wrap;
                 gap: 0.6rem;
@@ -337,8 +378,8 @@
     <div class="login-card">
         <div class="brand-header">
             <img src="{{ asset('images/Infrasph oren.png') }}" alt="Logo InfraSPH" class="brand-logo">
-            <h1>Selamat Datang</h1>
-            <h1>Di InfraSPH</h1>
+            <h1 class="hero-title">Selamat Datang</h1>
+            <p class="hero-subtitle">Di InfraSPH</p>
         </div>
 
         <!-- Notifikasi session success / error -->
@@ -356,7 +397,7 @@
             </div>
         @endif
 
-        <form action="{{ route('login.process') }}" method="POST">
+        <form action="{{ route('login.process') }}" method="POST" id="loginForm">
             @csrf
 
             <!-- Field Nama -->
@@ -402,11 +443,11 @@
                 <label class="checkbox-label">
                     <input type="checkbox" name="remember" id="remember"> Ingat saya
                 </label>
-                {{-- <a href="#" class="forgot-link">Lupa password?</a> --}}
+                <a href="#" class="forgot-link" aria-disabled="true">Lupa password?</a>
             </div>
 
-            <button type="submit" class="login-btn">
-                Masuk Sekarang
+            <button type="submit" class="login-btn" id="loginSubmitBtn">
+                <span id="loginSubmitText">Masuk Sekarang</span>
             </button>
         </form>
 
@@ -416,6 +457,9 @@
 <!-- JavaScript sederhana untuk toggle password -->
 <script>
     (function() {
+        const loginForm = document.getElementById('loginForm');
+        const submitBtn = document.getElementById('loginSubmitBtn');
+        const submitText = document.getElementById('loginSubmitText');
         const toggleBtn = document.getElementById('togglePasswordBtn');
         const passwordField = document.getElementById('password');
         const toggleIcon = document.getElementById('toggleIcon');
@@ -432,6 +476,13 @@
                     toggleIcon.classList.remove('fa-eye');
                     toggleIcon.classList.add('fa-eye-slash');
                 }
+            });
+        }
+
+        if (loginForm && submitBtn && submitText) {
+            loginForm.addEventListener('submit', function() {
+                submitBtn.disabled = true;
+                submitText.textContent = 'Memproses...';
             });
         }
     })();
