@@ -7,6 +7,12 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [Control::class, 'dashboard'])->name('root');
 Route::get('/dashboard', [Control::class, 'dashboard'])->name('dashboard');
 Route::get('/kelas-saya', [Control::class, 'classInventory'])->name('class.inventory');
+Route::get('/wali-kelas/kelas-saya', [Control::class, 'adminClassInventory'])->name('admin.class.inventory');
+Route::get('/ajukan-permintaan', [Control::class, 'createRequest'])->name('requests.create');
+Route::post('/ajukan-permintaan', [Control::class, 'storeRequest'])->name('requests.store');
+Route::get('/riwayat-pengajuan', [Control::class, 'requestHistory'])->name('requests.history');
+Route::get('/wali-kelas/riwayat-pengajuan', [Control::class, 'adminRequestHistory'])->name('admin.requests.history');
+Route::delete('/riwayat-pengajuan/{requestId}', [Control::class, 'destroyRequest'])->name('requests.destroy');
 
 Route::get('/login', [Control::class, 'showLoginForm'])->name('login');
 Route::post('/login', [Control::class, 'processLogin'])->name('login.process');

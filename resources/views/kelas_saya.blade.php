@@ -1,8 +1,11 @@
+
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Kelas Saya | InfraSPH</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
@@ -23,14 +26,19 @@
             color: var(--text-dark);
         }
 
-        .content-area {
+        .kelas-page {
             margin-left: 320px;
             min-height: 100vh;
             padding: 2rem 1.6rem 2.5rem;
+            width: calc(100% - 320px);
+            transition: margin-left 0.28s ease, width 0.28s ease, padding 0.28s ease;
         }
 
-        .page-shell { max-width: 1280px; }
-        .hero-card, .room-card, .summary-card, .action-card {
+        .page-shell {
+            width: 100%;
+            max-width: none;
+        }
+        .hero-card, .room-card, .summary-card {
             background: #ffffff;
             border: 1px solid #f3e3db;
             border-radius: 28px;
@@ -74,47 +82,74 @@
         .summary-card.is-accent .summary-label,
         .summary-card.is-accent .summary-value,
         .summary-card.is-accent .summary-note { color:#fffaf6; }
-        .room-layout { display:grid; grid-template-columns: 1.8fr 1fr; gap:1rem; }
+        .room-layout { display:grid; grid-template-columns: 1fr; gap:1rem; }
         .room-section-title { font-size:1.02rem; font-weight:800; color:#172033; margin-bottom:0.85rem; }
-        .action-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:0.85rem; }
-        .action-card { display:flex; align-items:center; gap:0.8rem; padding:1rem 1.05rem; border-radius:22px; text-decoration:none; color:#172033; }
-        .action-icon { width:44px; height:44px; border-radius:16px; display:inline-flex; align-items:center; justify-content:center; background:#fff3eb; color:var(--brand-orange); font-size:1.1rem; flex-shrink:0; }
-        .action-label { font-weight:700; }
-        .action-copy { color:#7b8794; font-size:0.85rem; line-height:1.45; margin-top:0.15rem; }
-        .latest-list { display:grid; gap:0.75rem; }
-        .latest-item { padding:0.9rem 0.95rem; border-radius:20px; background:#fff8f4; border:1px solid #f6e4da; }
-        .latest-title { font-weight:700; color:#172033; margin-bottom:0.2rem; }
         .latest-meta { color:#7b8794; font-size:0.84rem; }
-        .inventory-table-wrap { overflow-x:auto; }
-        .inventory-table { width:100%; border-collapse:collapse; min-width:720px; }
-        .inventory-table th, .inventory-table td { text-align:left; padding:0.9rem 0.85rem; border-bottom:1px solid #f5e7de; vertical-align:top; }
-        .inventory-table th { color:#6b7280; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.06em; }
-        .inventory-table td { color:#344054; font-size:0.95rem; }
+        .inventory-table-wrap {
+            overflow-x: auto;
+            border: 1px solid #f3e3db;
+            border-radius: 22px;
+            background: linear-gradient(180deg, #fffdfa, #ffffff);
+        }
+        .inventory-table { width:100%; border-collapse:separate; border-spacing:0; min-width:720px; }
+        .inventory-table th, .inventory-table td { text-align:left; padding:1rem 1rem; border-bottom:1px solid #f5e7de; vertical-align:top; word-break: break-word; }
+        .inventory-table th { color:#6b7280; font-size:0.82rem; text-transform:uppercase; letter-spacing:0.06em; background:#fff8f4; }
+        .inventory-table td { color:#344054; font-size:0.95rem; background:#ffffff; }
         .inventory-table tbody tr:last-child td { border-bottom:none; }
         .inventory-name { font-weight:700; color:#172033; }
         .inventory-count { font-weight:700; }
+        .room-main { width: 100%; }
+
+        .app-shell.chatbot-open .inventory-table {
+            min-width: 0;
+            table-layout: fixed;
+        }
+
+        .app-shell.chatbot-open .inventory-table th:nth-child(1),
+        .app-shell.chatbot-open .inventory-table td:nth-child(1) {
+            width: 26%;
+        }
+
+        .app-shell.chatbot-open .inventory-table th:nth-child(2),
+        .app-shell.chatbot-open .inventory-table td:nth-child(2) {
+            width: 12%;
+        }
+
+        .app-shell.chatbot-open .inventory-table th:nth-child(3),
+        .app-shell.chatbot-open .inventory-table td:nth-child(3) {
+            width: 16%;
+        }
+
+        .app-shell.chatbot-open .inventory-table th:nth-child(4),
+        .app-shell.chatbot-open .inventory-table td:nth-child(4) {
+            width: 46%;
+        }
         .status-badge { display:inline-flex; align-items:center; gap:0.35rem; padding:0.45rem 0.7rem; border-radius:999px; font-size:0.78rem; font-weight:700; }
         .status-badge.good { background:#eaf8ef; color:#15803d; }
         .status-badge.bad { background:#fff0eb; color:#c2410c; }
         .empty-state { padding: 1rem 0.25rem 0.25rem; color:#667085; }
 
+        .app-shell.sidebar-collapsed .kelas-page {
+            margin-left: 88px;
+            width: calc(100% - 88px);
+        }
+
         @media (max-width: 1120px) {
             .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .room-layout { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 860px) {
-            .content-area { margin-left: 0; padding:1.2rem 1rem 2rem; }
-            .summary-grid,
-            .action-grid { grid-template-columns: 1fr; }
+            .kelas-page { margin-left: 0; padding:1.2rem 1rem 2rem; width: 100%; }
+            .summary-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    @include('header')
+    <div class="app-shell" id="appShell">
+        @include('header')
 
-    <main class="content-area">
-        <div class="page-shell">
+        <main class="kelas-page">
+            <div class="page-shell">
             <section class="hero-card">
                 <div class="eyebrow">{{ $dashboard['role_name'] ?? 'Pengguna' }}</div>
                 <h1 class="hero-title">Kelas Saya</h1>
@@ -151,7 +186,7 @@
                                 <div class="summary-card">
                                     <div class="summary-label">Total Barang</div>
                                     <div class="summary-value">{{ number_format($summary['total_barang']) }}</div>
-                                    <div class="summary-note">{{ number_format($summary['barang_baik']) }} baik dan {{ number_format($summary['barang_rusak']) }} perlu perhatian</div>
+                                    <div class="summary-note">{{ number_format($summary['barang_baik']) }} aman dan {{ number_format($summary['barang_rusak']) }} perlu dicek</div>
                                 </div>
                                 <div class="summary-card is-accent">
                                     <div class="summary-label">Pengajuan</div>
@@ -191,7 +226,6 @@
                                                         <tr>
                                                             <td>
                                                                 <div class="inventory-name">{{ ucfirst($row->nama_barang) }}</div>
-                                                                <div class="latest-meta">{{ $row->satuan }}</div>
                                                             </td>
                                                             <td><span class="inventory-count">{{ $totalJumlah }}</span></td>
                                                             <td><span class="status-badge {{ $kondisiClass }}">{{ $kondisiLabel }}</span></td>
@@ -203,40 +237,6 @@
                                         </div>
                                     @endif
                                 </div>
-
-                                <aside class="room-side">
-                                    <div class="room-section-title">Aksi Cepat</div>
-                                    <div class="action-grid">
-                                        <a href="#" class="action-card">
-                                            <span class="action-icon"><i class="bi bi-send-plus-fill"></i></span>
-                                            <span>
-                                                <div class="action-label">Ajukan Barang</div>
-                                                <div class="action-copy">Buat permintaan barang baru untuk kebutuhan kelas.</div>
-                                            </span>
-                                        </a>
-                                        <a href="#" class="action-card">
-                                            <span class="action-icon"><i class="bi bi-tools"></i></span>
-                                            <span>
-                                                <div class="action-label">Ajukan Perbaikan</div>
-                                                <div class="action-copy">Laporkan barang rusak agar bisa ditindaklanjuti.</div>
-                                            </span>
-                                        </a>
-                                    </div>
-
-                                    <div class="room-section-title" style="margin-top:1.1rem;">Pengajuan Terbaru</div>
-                                    @if ($overview['latest_requests'] === [])
-                                        <div class="empty-state">Belum ada pengajuan terbaru untuk ruangan ini.</div>
-                                    @else
-                                        <div class="latest-list">
-                                            @foreach ($overview['latest_requests'] as $request)
-                                                <div class="latest-item">
-                                                    <div class="latest-title">{{ $request['jenis'] }}</div>
-                                                    <div class="latest-meta">{{ $request['status'] }} • {{ $request['tanggal'] }}</div>
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    @endif
-                                </aside>
                             </div>
                         </div>
                     </article>
@@ -246,7 +246,9 @@
                     </article>
                 @endforelse
             </section>
-        </div>
-    </main>
+            </div>
+        </main>
+    </div>
+    @include('chatbot')
 </body>
 </html>

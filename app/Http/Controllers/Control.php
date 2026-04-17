@@ -223,58 +223,396 @@ class Control extends Controller
         }
 
         $user = (array) session('user');
-        $level = (int) ($user['level'] ?? 0);
-
-        if (! in_array($level, [1, 2], true)) {
+        if ((int) ($user['level'] ?? 0) !== 1) {
             return redirect()->route('dashboard');
         }
 
         $assignments = $this->getActiveAssignmentsForUser($user);
-        $roomIds = $assignments->pluck('id_ruangan')->map(fn ($value) => (int) $value)->all();
-        $inventoryRows = $this->getInventoryRowsForRooms($roomIds);
-        $inventoryByRoom = $inventoryRows->groupBy('id_ruangan');
-        $requestRows = $this->getRequestRowsForRooms($roomIds);
-        $requestsByRoom = $requestRows->groupBy('id_ruangan');
-        $roomContacts = $this->getRoomContactsForRooms($roomIds);
         $dashboard = $this->resolveDashboardData($user);
-        $roomOverviews = $assignments->map(function ($assignment) use ($inventoryByRoom, $requestsByRoom, $roomContacts) {
-            $roomInventory = $inventoryByRoom->get($assignment->id_ruangan, collect());
-            $roomRequests = $requestsByRoom->get($assignment->id_ruangan, collect());
-            $totalGood = (int) $roomInventory->sum('jumlah_baik');
-            $totalBad = (int) $roomInventory->sum('jumlah_rusak');
-            $totalItems = $totalGood + $totalBad;
-            $activeRequests = (int) $roomRequests
-                ->reject(fn ($request) => in_array((string) $request->status_permintaan, ['selesai', 'ditolak_admin', 'ditolak_owner', 'ditolak'], true))
-                ->count();
-
-            return [
-                'assignment' => $assignment,
-                'inventory_rows' => $roomInventory,
-                'summary' => [
-                    'total_barang' => $totalItems,
-                    'barang_baik' => $totalGood,
-                    'barang_rusak' => $totalBad,
-                    'pengajuan_aktif' => $activeRequests,
-                ],
-                'wali_kelas' => $roomContacts[(int) $assignment->id_ruangan] ?? 'Belum ditentukan',
-                'latest_requests' => $roomRequests
-                    ->sortByDesc('id_permintaan')
-                    ->take(2)
-                    ->map(fn ($request) => [
-                        'jenis' => ucfirst((string) $request->jenis_permintaan),
-                        'status' => $this->formatRequestStatusLabel((string) $request->status_permintaan),
-                        'tanggal' => (string) $request->tanggal_permintaan,
-                    ])
-                    ->values()
-                    ->all(),
-            ];
-        })->values();
+        $roomOverviews = $this->buildRoomOverviews($assignments);
 
         return view('kelas_saya', [
             'user' => $user,
             'dashboard' => $dashboard,
             'roomOverviews' => $roomOverviews,
         ]);
+    }
+
+    public function adminClassInventory(): View|RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+
+        if ((int) ($user['level'] ?? 0) !== 2) {
+            return redirect()->route('dashboard');
+        }
+
+        $assignments = $this->getActiveAssignmentsForUser($user);
+        $dashboard = $this->resolveDashboardData($user);
+        $roomOverviews = $this->buildRoomOverviews($assignments);
+
+        return view('kelas_saya_wali', [
+            'user' => $user,
+            'dashboard' => $dashboard,
+            'roomOverviews' => $roomOverviews,
+        ]);
+    }
+
+    public function createRequest(): View|RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+        $level = (int) ($user['level'] ?? 0);
+
+        if ($level !== 1) {
+            return redirect()->route('dashboard');
+        }
+
+        $assignment = $this->getActiveAssignmentsForUser($user)->sortByDesc('id_penugasan_ruangan')->first();
+
+        if (! $assignment) {
+            return redirect()->route('dashboard')->with('error', 'Akunmu belum memiliki kelas aktif untuk mengajukan permintaan.');
+        }
+
+        $dashboard = $this->resolveDashboardData($user);
+        $availableItems = DB::table('barang')
+            ->where('status', 'aktif')
+            ->whereNotIn(DB::raw('LOWER(nama_barang)'), ['printer', 'proyektor', 'komputer'])
+            ->orderBy('nama_barang')
+            ->get(['id_barang', 'nama_barang', 'satuan', 'keterangan']);
+
+        $roomInventory = DB::table('inventaris_ruangan as ir')
+            ->join('barang as b', 'b.id_barang', '=', 'ir.id_barang')
+            ->where('ir.id_ruangan', $assignment->id_ruangan)
+            ->whereNotIn(DB::raw('LOWER(b.nama_barang)'), ['printer', 'proyektor', 'komputer'])
+            ->orderBy('b.nama_barang')
+            ->get([
+                'b.id_barang',
+                'b.nama_barang',
+                'b.satuan',
+                'ir.jumlah_baik',
+                'ir.jumlah_rusak',
+                'ir.keterangan',
+            ]);
+
+        return view('ajukan_permintaan', [
+            'user' => $user,
+            'dashboard' => $dashboard,
+            'assignment' => $assignment,
+            'availableItems' => $availableItems,
+            'roomInventory' => $roomInventory,
+            'todayLabel' => now()->translatedFormat('d F Y'),
+        ]);
+    }
+
+    public function storeRequest(Request $request): RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+
+        if ((int) ($user['level'] ?? 0) !== 1) {
+            return redirect()->route('dashboard');
+        }
+
+        $assignment = $this->getActiveAssignmentsForUser($user)->sortByDesc('id_penugasan_ruangan')->first();
+
+        if (! $assignment) {
+            return redirect()->route('dashboard')->with('error', 'Akunmu belum memiliki kelas aktif untuk mengajukan permintaan.');
+        }
+
+        $validated = $request->validate([
+            'request_type' => ['required', 'in:barang_baru,perbaikan'],
+            'new_item_id' => ['nullable', 'integer', 'exists:barang,id_barang'],
+            'repair_item_id' => ['nullable', 'integer', 'exists:barang,id_barang'],
+            'quantity' => ['required', 'integer', 'min:1'],
+            'reason' => ['required', 'string', 'min:5', 'max:1000'],
+            'priority' => ['nullable', 'in:biasa,mendesak'],
+            'damage_level' => ['nullable', 'in:ringan,sedang,berat'],
+        ], [
+            'request_type.required' => 'Jenis permintaan wajib dipilih.',
+            'request_type.in' => 'Jenis permintaan tidak valid.',
+            'quantity.required' => 'Jumlah wajib diisi.',
+            'quantity.min' => 'Jumlah minimal 1.',
+            'reason.required' => 'Alasan atau deskripsi wajib diisi.',
+            'reason.min' => 'Alasan atau deskripsi minimal 5 karakter.',
+        ]);
+
+        $itemId = $validated['request_type'] === 'barang_baru'
+            ? (int) ($validated['new_item_id'] ?? 0)
+            : (int) ($validated['repair_item_id'] ?? 0);
+
+        if ($itemId <= 0) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    'item_selection' => $validated['request_type'] === 'barang_baru'
+                        ? 'Pilih barang yang ingin diajukan.'
+                        : 'Pilih barang inventaris yang ingin diperbaiki.',
+                ]);
+        }
+
+        if ($validated['request_type'] === 'perbaikan') {
+            $itemExistsInRoom = DB::table('inventaris_ruangan')
+                ->where('id_ruangan', $assignment->id_ruangan)
+                ->where('id_barang', $itemId)
+                ->exists();
+
+            if (! $itemExistsInRoom) {
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        'repair_item_id' => 'Barang perbaikan harus berasal dari inventaris kelasmu sendiri.',
+                    ]);
+            }
+        }
+
+        DB::transaction(function () use ($validated, $assignment, $user, $itemId) {
+            $requestId = DB::table('permintaan')->insertGetId([
+                'kode_permintaan' => $this->generateRequestCode(),
+                'id_ruangan' => (int) $assignment->id_ruangan,
+                'id_user_peminta' => (int) $user['id_user'],
+                'jenis_permintaan' => $validated['request_type'] === 'barang_baru' ? 'penambahan' : 'perbaikan',
+                'status_permintaan' => 'diajukan',
+                'catatan_peminta' => $this->buildRequestNotes($validated),
+                'tanggal_permintaan' => now()->toDateString(),
+            ]);
+
+            DB::table('detail_permintaan')->insert([
+                'id_permintaan' => $requestId,
+                'id_barang' => $itemId,
+                'jumlah_diminta' => (int) $validated['quantity'],
+                'jumlah_disetujui' => 0,
+                'jumlah_diberikan' => 0,
+                'keterangan' => trim((string) ($validated['reason'] ?? '')),
+            ]);
+        });
+
+        return redirect()
+            ->route('requests.create')
+            ->with('success', 'Pengajuan berhasil dikirim dan sekarang menunggu persetujuan wali kelas.');
+    }
+
+    public function requestHistory(): View|RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+
+        if ((int) ($user['level'] ?? 0) !== 1) {
+            return redirect()->route('dashboard');
+        }
+
+        $dashboard = $this->resolveDashboardData($user);
+        $requests = DB::table('permintaan as p')
+            ->join('ruangan as r', 'r.id_ruangan', '=', 'p.id_ruangan')
+            ->leftJoin('detail_permintaan as dp', 'dp.id_permintaan', '=', 'p.id_permintaan')
+            ->leftJoin('barang as b', 'b.id_barang', '=', 'dp.id_barang')
+            ->where('p.id_user_peminta', $user['id_user'])
+            ->orderByDesc('p.tanggal_permintaan')
+            ->orderByDesc('p.id_permintaan')
+            ->get([
+                'p.id_permintaan',
+                'p.kode_permintaan',
+                'p.jenis_permintaan',
+                'p.status_permintaan',
+                'p.catatan_peminta',
+                'p.tanggal_permintaan',
+                'r.nama_ruangan',
+                'r.kode_ruangan',
+                'dp.jumlah_diminta',
+                'dp.keterangan as detail_keterangan',
+                'b.nama_barang',
+            ])
+            ->groupBy('id_permintaan')
+            ->map(function ($rows) {
+                $first = $rows->first();
+                $items = $rows
+                    ->filter(fn ($row) => ! empty($row->nama_barang))
+                    ->map(fn ($row) => [
+                        'nama_barang' => ucfirst((string) $row->nama_barang),
+                        'jumlah' => (int) ($row->jumlah_diminta ?? 0),
+                        'keterangan' => (string) ($row->detail_keterangan ?? '-'),
+                    ])
+                    ->values()
+                    ->all();
+
+                $approvalRows = DB::table('persetujuan_permintaan as pp')
+                    ->join('users as u', 'u.id_user', '=', 'pp.id_user_penyetuju')
+                    ->where('pp.id_permintaan', $first->id_permintaan)
+                    ->orderBy('pp.id_persetujuan_permintaan')
+                    ->get([
+                        'pp.tahap_persetujuan',
+                        'pp.status_persetujuan',
+                        'pp.catatan_persetujuan',
+                        'pp.tanggal_persetujuan',
+                        'u.nama as penyetuju',
+                    ]);
+
+                return [
+                    'id_permintaan' => (int) $first->id_permintaan,
+                    'kode_permintaan' => (string) $first->kode_permintaan,
+                    'tanggal' => (string) $first->tanggal_permintaan,
+                    'tanggal_label' => \Carbon\Carbon::parse($first->tanggal_permintaan)->translatedFormat('d M Y'),
+                    'jenis' => $this->formatRequestTypeLabel((string) $first->jenis_permintaan),
+                    'status' => $this->formatRequestStatusLabel((string) $first->status_permintaan),
+                    'status_key' => $this->statusFilterKey((string) $first->status_permintaan),
+                    'status_class' => $this->statusBadgeClass((string) $first->status_permintaan),
+                    'catatan' => (string) ($first->catatan_peminta ?? '-'),
+                    'ruangan' => (string) $first->nama_ruangan,
+                    'kode_ruangan' => (string) $first->kode_ruangan,
+                    'barang_ringkas' => $items !== [] ? implode(', ', array_map(fn ($item) => $item['nama_barang'], $items)) : '-',
+                    'jumlah_ringkas' => $items !== [] ? array_sum(array_map(fn ($item) => $item['jumlah'], $items)) : 0,
+                    'items' => $items,
+                    'approvals' => [
+                        [
+                            'label' => 'Wali Kelas',
+                            'status' => $this->approvalStageStatus($approvalRows, 'admin'),
+                        ],
+                        [
+                            'label' => 'Kepala Sekolah',
+                            'status' => $this->approvalStageStatus($approvalRows, 'owner'),
+                        ],
+                        [
+                            'label' => 'Pengelola Sistem',
+                            'status' => $this->approvalStageStatus($approvalRows, 'superadmin'),
+                        ],
+                    ],
+                ];
+            })
+            ->values();
+
+        $statusCounts = [
+            'all' => $requests->count(),
+            'process' => $requests->where('status_key', 'process')->count(),
+            'approved' => $requests->where('status_key', 'approved')->count(),
+            'rejected' => $requests->where('status_key', 'rejected')->count(),
+        ];
+
+        return view('riwayat_pengajuan', [
+            'user' => $user,
+            'dashboard' => $dashboard,
+            'requests' => $requests,
+            'statusCounts' => $statusCounts,
+        ]);
+    }
+
+    public function adminRequestHistory(): View|RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+
+        if ((int) ($user['level'] ?? 0) !== 2) {
+            return redirect()->route('dashboard');
+        }
+
+        $dashboard = $this->resolveDashboardData($user);
+        $assignments = $this->getActiveAssignmentsForUser($user);
+        $roomIds = $assignments->pluck('id_ruangan')->map(fn ($value) => (int) $value)->all();
+
+        $requests = $roomIds === []
+            ? collect()
+            : DB::table('permintaan as p')
+                ->join('ruangan as r', 'r.id_ruangan', '=', 'p.id_ruangan')
+                ->join('users as u', 'u.id_user', '=', 'p.id_user_peminta')
+                ->leftJoin('detail_permintaan as dp', 'dp.id_permintaan', '=', 'p.id_permintaan')
+                ->leftJoin('barang as b', 'b.id_barang', '=', 'dp.id_barang')
+                ->whereIn('p.id_ruangan', $roomIds)
+                ->orderByDesc('p.tanggal_permintaan')
+                ->orderByDesc('p.id_permintaan')
+                ->get([
+                    'p.id_permintaan',
+                    'p.kode_permintaan',
+                    'p.jenis_permintaan',
+                    'p.status_permintaan',
+                    'p.tanggal_permintaan',
+                    'r.nama_ruangan',
+                    'r.kode_ruangan',
+                    'u.nama as nama_peminta',
+                    'dp.jumlah_diminta',
+                    'b.nama_barang',
+                ])
+                ->groupBy('id_permintaan')
+                ->map(function ($rows) {
+                    $first = $rows->first();
+                    $items = $rows
+                        ->filter(fn ($row) => ! empty($row->nama_barang))
+                        ->map(fn ($row) => [
+                            'nama_barang' => ucfirst((string) $row->nama_barang),
+                            'jumlah' => (int) ($row->jumlah_diminta ?? 0),
+                        ])
+                        ->values()
+                        ->all();
+
+                    return [
+                        'id_permintaan' => (int) $first->id_permintaan,
+                        'kode_permintaan' => (string) $first->kode_permintaan,
+                        'tanggal_label' => \Carbon\Carbon::parse($first->tanggal_permintaan)->translatedFormat('d M Y'),
+                        'jenis' => $this->formatRequestTypeLabel((string) $first->jenis_permintaan),
+                        'status' => $this->formatRequestStatusLabel((string) $first->status_permintaan),
+                        'status_key' => $this->statusFilterKey((string) $first->status_permintaan),
+                        'status_class' => $this->statusBadgeClass((string) $first->status_permintaan),
+                        'ruangan' => (string) $first->nama_ruangan,
+                        'kode_ruangan' => (string) $first->kode_ruangan,
+                        'peminta' => (string) $first->nama_peminta,
+                        'barang_ringkas' => $items !== [] ? implode(', ', array_map(fn ($item) => $item['nama_barang'], $items)) : '-',
+                        'jumlah_ringkas' => $items !== [] ? array_sum(array_map(fn ($item) => $item['jumlah'], $items)) : 0,
+                    ];
+                })
+                ->values();
+
+        $statusCounts = [
+            'all' => $requests->count(),
+            'process' => $requests->where('status_key', 'process')->count(),
+            'approved' => $requests->where('status_key', 'approved')->count(),
+            'rejected' => $requests->where('status_key', 'rejected')->count(),
+        ];
+
+        return view('riwayat_pengajuan_wali', [
+            'user' => $user,
+            'dashboard' => $dashboard,
+            'requests' => $requests,
+            'statusCounts' => $statusCounts,
+        ]);
+    }
+
+    public function destroyRequest(Request $request, int $requestId): RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+
+        if ((int) ($user['level'] ?? 0) !== 1) {
+            return redirect()->route('dashboard');
+        }
+
+        $ownedRequest = DB::table('permintaan')
+            ->where('id_permintaan', $requestId)
+            ->where('id_user_peminta', $user['id_user'])
+            ->first();
+
+        if (! $ownedRequest) {
+            return redirect()->route('requests.history')->with('error', 'Pengajuan tidak ditemukan atau bukan milik akunmu.');
+        }
+
+        DB::table('permintaan')->where('id_permintaan', $requestId)->delete();
+
+        return redirect()->route('requests.history')->with('success', 'Pengajuan berhasil dihapus.');
     }
 
     /**
@@ -592,6 +930,90 @@ class Control extends Controller
     }
 
     /**
+     * @param  \Illuminate\Support\Collection<int, object>  $assignments
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function buildRoomOverviews($assignments)
+    {
+        $roomIds = $assignments->pluck('id_ruangan')->map(fn ($value) => (int) $value)->all();
+        $inventoryRows = $this->getInventoryRowsForRooms($roomIds);
+        $inventoryByRoom = $inventoryRows->groupBy('id_ruangan');
+        $requestRows = $this->getRequestRowsForRooms($roomIds);
+        $requestsByRoom = $requestRows->groupBy('id_ruangan');
+        $roomContacts = $this->getRoomContactsForRooms($roomIds);
+
+        return $assignments->map(function ($assignment) use ($inventoryByRoom, $requestsByRoom, $roomContacts) {
+            $roomInventory = $inventoryByRoom->get($assignment->id_ruangan, collect());
+            $roomRequests = $requestsByRoom->get($assignment->id_ruangan, collect());
+            $totalGood = (int) $roomInventory->sum('jumlah_baik');
+            $totalBad = (int) $roomInventory->sum('jumlah_rusak');
+            $totalItems = $totalGood + $totalBad;
+            $activeRequests = (int) $roomRequests
+                ->reject(fn ($request) => in_array((string) $request->status_permintaan, ['selesai', 'ditolak_admin', 'ditolak_owner', 'ditolak'], true))
+                ->count();
+            $pendingReview = (int) $roomRequests
+                ->filter(fn ($request) => (string) $request->status_permintaan === 'diajukan')
+                ->count();
+            $approvedRequests = (int) $roomRequests
+                ->filter(fn ($request) => in_array((string) $request->status_permintaan, ['disetujui_admin', 'disetujui_owner', 'selesai'], true))
+                ->count();
+
+            return [
+                'assignment' => $assignment,
+                'inventory_rows' => $roomInventory,
+                'summary' => [
+                    'total_barang' => $totalItems,
+                    'barang_baik' => $totalGood,
+                    'barang_rusak' => $totalBad,
+                    'pengajuan_aktif' => $activeRequests,
+                    'total_pengajuan' => (int) $roomRequests->count(),
+                    'menunggu_review' => $pendingReview,
+                    'pengajuan_disetujui' => $approvedRequests,
+                ],
+                'wali_kelas' => $roomContacts[(int) $assignment->id_ruangan] ?? 'Belum ditentukan',
+                'latest_requests' => $roomRequests
+                    ->sortByDesc('id_permintaan')
+                    ->take(2)
+                    ->map(fn ($request) => [
+                        'jenis' => ucfirst((string) $request->jenis_permintaan),
+                        'status' => $this->formatRequestStatusLabel((string) $request->status_permintaan),
+                        'tanggal' => (string) $request->tanggal_permintaan,
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        })->values();
+    }
+
+    private function generateRequestCode(): string
+    {
+        do {
+            $code = 'PMT-'.now()->format('Ymd-His').'-'.str_pad((string) random_int(1, 999), 3, '0', STR_PAD_LEFT);
+        } while (DB::table('permintaan')->where('kode_permintaan', $code)->exists());
+
+        return $code;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function buildRequestNotes(array $validated): string
+    {
+        $notes = [];
+        $notes[] = 'Keterangan: '.trim((string) ($validated['reason'] ?? ''));
+
+        if (($validated['request_type'] ?? null) === 'barang_baru' && ! empty($validated['priority'])) {
+            $notes[] = 'Prioritas: '.ucfirst((string) $validated['priority']);
+        }
+
+        if (($validated['request_type'] ?? null) === 'perbaikan' && ! empty($validated['damage_level'])) {
+            $notes[] = 'Tingkat kerusakan: '.ucfirst((string) $validated['damage_level']);
+        }
+
+        return implode(' | ', $notes);
+    }
+
+    /**
      * @param  array<int, int>  $roomIds
      * @return \Illuminate\Support\Collection<int, object>
      */
@@ -681,6 +1103,53 @@ class Control extends Controller
         $label = str_replace('admin', 'wali kelas', $label);
 
         return ucfirst($label);
+    }
+
+    private function formatRequestTypeLabel(string $type): string
+    {
+        return match (strtolower($type)) {
+            'penambahan' => 'Barang Baru',
+            'perbaikan' => 'Perbaikan',
+            default => ucfirst(str_replace('_', ' ', strtolower($type))),
+        };
+    }
+
+    private function statusFilterKey(string $status): string
+    {
+        $status = strtolower($status);
+
+        if (str_contains($status, 'ditolak')) {
+            return 'rejected';
+        }
+
+        if (in_array($status, ['selesai', 'disetujui_owner'], true)) {
+            return 'approved';
+        }
+
+        return 'process';
+    }
+
+    private function statusBadgeClass(string $status): string
+    {
+        return match ($this->statusFilterKey($status)) {
+            'approved' => 'approved',
+            'rejected' => 'rejected',
+            default => 'process',
+        };
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, object>  $approvalRows
+     */
+    private function approvalStageStatus($approvalRows, string $stage): string
+    {
+        $match = $approvalRows->first(fn ($row) => strtolower((string) $row->tahap_persetujuan) === $stage);
+
+        if (! $match) {
+            return 'pending';
+        }
+
+        return strtolower((string) $match->status_persetujuan) === 'disetujui' ? 'done' : 'rejected';
     }
 
     /**

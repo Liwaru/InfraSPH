@@ -362,14 +362,14 @@
         };
         $menuByLevel = [
             1 => [
-                ['label' => 'Kelas Saya', 'icon' => 'bi bi-door-open-fill', 'url' => $safeRoute('class.inventory')],
-                ['label' => 'Ajukan Permintaan', 'icon' => 'bi bi-send-plus-fill', 'url' => $safeRoute('requests.create')],
-                ['label' => 'Riwayat Pengajuan', 'icon' => 'bi bi-clock-history', 'url' => $safeRoute('requests.history')],
+                ['label' => 'Kelas Saya', 'icon' => 'bi bi-door-open-fill', 'url' => route('class.inventory')],
+                ['label' => 'Ajukan Permintaan', 'icon' => 'bi bi-send-plus-fill', 'url' => route('requests.create')],
+                ['label' => 'Riwayat Pengajuan', 'icon' => 'bi bi-clock-history', 'url' => route('requests.history')],
             ],
             2 => [
-                ['label' => 'Kelas Binaan', 'icon' => 'bi bi-building', 'url' => $safeRoute('admin.classroom')],
+                ['label' => 'Kelas Saya', 'icon' => 'bi bi-building', 'url' => $safeRoute('admin.class.inventory')],
                 ['label' => 'Pengajuan Masuk', 'icon' => 'bi bi-inbox-fill', 'url' => $safeRoute('admin.requests.inbox')],
-                ['label' => 'Riwayat Verifikasi', 'icon' => 'bi bi-patch-check-fill', 'url' => $safeRoute('admin.requests.history')],
+                ['label' => 'Riwayat Pengajuan', 'icon' => 'bi bi-patch-check-fill', 'url' => $safeRoute('admin.requests.history')],
             ],
             3 => [
                 ['label' => 'Data User', 'icon' => 'bi bi-people-fill', 'url' => $safeRoute('superadmin.users')],
@@ -412,3 +412,28 @@
         </button>
     </form>
 </aside>
+
+<script>
+    (function () {
+        function initSidebarToggle() {
+            const appShell = document.getElementById('appShell');
+            const toggleButton = document.getElementById('sidebarToggle');
+
+            if (!appShell || !toggleButton || window.innerWidth <= 860) {
+                return;
+            }
+
+            toggleButton.addEventListener('click', function () {
+                appShell.classList.toggle('sidebar-collapsed');
+                const expanded = !appShell.classList.contains('sidebar-collapsed');
+                toggleButton.setAttribute('aria-expanded', String(expanded));
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initSidebarToggle, { once: true });
+        } else {
+            initSidebarToggle();
+        }
+    })();
+</script>

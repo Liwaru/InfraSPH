@@ -845,14 +845,6 @@
                 return 1000 + Math.floor(Math.random() * 1000);
             }
 
-            if (appShell && toggleButton && window.innerWidth > 860) {
-                toggleButton.addEventListener('click', function () {
-                    appShell.classList.toggle('sidebar-collapsed');
-                    const expanded = !appShell.classList.contains('sidebar-collapsed');
-                    toggleButton.setAttribute('aria-expanded', String(expanded));
-                });
-            }
-
             function setChatbotOpen(isOpen) {
                 if (!chatbotShell || !chatbotToggle || !appShell) {
                     return;
