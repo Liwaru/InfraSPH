@@ -374,9 +374,8 @@
             3 => [
                 ['label' => 'Data User', 'icon' => 'bi bi-people-fill', 'url' => $safeRoute('superadmin.users')],
                 ['label' => 'Data Ruangan', 'icon' => 'bi bi-building-fill-gear', 'url' => $safeRoute('superadmin.rooms')],
-                ['label' => 'Data Barang', 'icon' => 'bi bi-grid-fill', 'url' => $safeRoute('superadmin.items')],
-                ['label' => 'Data Inventaris', 'icon' => 'bi bi-box-seam-fill', 'url' => $safeRoute('superadmin.inventories')],
-                ['label' => 'Realisasi Pengajuan', 'icon' => 'bi bi-list-check', 'url' => $safeRoute('superadmin.requests.realization')],
+                ['label' => 'Data Inventaris', 'icon' => 'bi bi-grid-fill', 'url' => $safeRoute('superadmin.items')],
+                ['label' => 'Tindak Lanjut Pengajuan', 'icon' => 'bi bi-list-check', 'url' => $safeRoute('superadmin.requests.realization')],
                 ['label' => 'Laporan', 'icon' => 'bi bi-bar-chart-line-fill', 'url' => $safeRoute('superadmin.reports')],
             ],
             4 => [

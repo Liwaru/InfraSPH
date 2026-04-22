@@ -120,6 +120,12 @@
             border-color: #ffd9c3;
         }
 
+        .summary-card.approved {
+            background: linear-gradient(180deg, #f1fbf4, #ffffff);
+            border-color: #bfe7ca;
+            color: #17643b;
+        }
+
         .summary-label {
             font-size: 0.86rem;
             font-weight: 600;

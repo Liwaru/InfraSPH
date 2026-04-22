@@ -23,6 +23,22 @@ Route::post('/kepala-sekolah/persetujuan-pengajuan/{requestId}/reject', [Control
 Route::get('/kepala-sekolah/laporan', [Control::class, 'ownerReports'])->name('owner.reports');
 Route::get('/kepala-sekolah/laporan/export', [Control::class, 'ownerReportsExport'])->name('owner.reports.export');
 Route::delete('/riwayat-pengajuan/{requestId}', [Control::class, 'destroyRequest'])->name('requests.destroy');
+Route::get('/superadmin/data-user', [Control::class, 'superadminUsers'])->name('superadmin.users');
+Route::post('/superadmin/data-user', [Control::class, 'superadminStoreUser'])->name('superadmin.users.store');
+Route::post('/superadmin/data-user/{userId}/update', [Control::class, 'superadminUpdateUser'])->name('superadmin.users.update');
+Route::post('/superadmin/data-user/{userId}/assignment', [Control::class, 'superadminAssignUserRoom'])->name('superadmin.users.assignment');
+Route::get('/superadmin/data-ruangan', [Control::class, 'superadminRooms'])->name('superadmin.rooms');
+Route::post('/superadmin/data-ruangan', [Control::class, 'superadminStoreRoom'])->name('superadmin.rooms.store');
+Route::post('/superadmin/data-ruangan/{roomId}/update', [Control::class, 'superadminUpdateRoom'])->name('superadmin.rooms.update');
+Route::post('/superadmin/data-ruangan/{roomId}/delete', [Control::class, 'superadminDeleteRoom'])->name('superadmin.rooms.delete');
+Route::get('/superadmin/data-barang', [Control::class, 'superadminItems'])->name('superadmin.items');
+Route::post('/superadmin/data-barang', [Control::class, 'superadminStoreItem'])->name('superadmin.items.store');
+Route::post('/superadmin/data-barang/{inventoryId}/update', [Control::class, 'superadminUpdateItem'])->name('superadmin.items.update');
+Route::post('/superadmin/data-barang/{inventoryId}/delete', [Control::class, 'superadminDeleteItem'])->name('superadmin.items.delete');
+Route::get('/superadmin/tindak-lanjut-pengajuan', [Control::class, 'superadminRequestRealizations'])->name('superadmin.requests.realization');
+Route::post('/superadmin/tindak-lanjut-pengajuan/{requestId}/realize', [Control::class, 'superadminRealizeRequest'])->name('superadmin.requests.realization.store');
+Route::get('/superadmin/laporan', [Control::class, 'superadminReports'])->name('superadmin.reports');
+Route::get('/superadmin/laporan/export', [Control::class, 'superadminReportsExport'])->name('superadmin.reports.export');
 
 Route::get('/login', [Control::class, 'showLoginForm'])->name('login');
 Route::post('/login', [Control::class, 'processLogin'])->name('login.process');
