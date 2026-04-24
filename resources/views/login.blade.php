@@ -17,13 +17,15 @@
         body {
             font-family: 'Inter', sans-serif;
             min-height: 100vh;
+            height: 100vh;
+            height: 100dvh;
             background: linear-gradient(135deg, #ff5900 0%, #ff5900 42%, #ff5900 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 1.5rem;
+            padding: 0.9rem 1.5rem;
             position: relative;
-            overflow-x: hidden;
+            overflow: hidden;
         }
 
         /* background animasi lembut */
@@ -69,7 +71,7 @@
             background: rgba(255, 255, 255, 0.96);
             backdrop-filter: blur(2px);
             border-radius: 2rem;
-            padding: 2rem 1.8rem 2.2rem;
+            padding: 1.55rem 1.8rem 1.8rem;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1), 0 22px 50px -24px rgba(69, 28, 0, 0.34), 0 10px 25px -18px rgba(255, 106, 0, 0.28);
             border: 1px solid rgba(255, 255, 255, 0.7);
         }
@@ -77,14 +79,14 @@
         /* header */
         .brand-header {
             text-align: center;
-            margin-bottom: 1.8rem;
+            margin-bottom: 1.35rem;
         }
 
         .brand-logo {
             width: min(228px, 70%);
             height: auto;
             display: block;
-            margin: 0 auto 0.75rem;
+            margin: 0 auto 0.5rem;
             object-fit: contain;
         }
 
@@ -126,6 +128,7 @@
             align-items: center;
             gap: 0.6rem;
             backdrop-filter: blur(4px);
+            position: relative;
         }
 
         .alert-success {
@@ -142,6 +145,29 @@
 
         .alert-message i {
             font-size: 1.1rem;
+        }
+
+        .alert-message span {
+            flex: 1 1 auto;
+            padding-right: 1.75rem;
+        }
+
+        .alert-close {
+            position: absolute;
+            right: 0.72rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 1.55rem;
+            height: 1.55rem;
+            border: none;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.58);
+            color: currentColor;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.8rem;
         }
 
         /* form group */
@@ -346,6 +372,74 @@
             text-decoration: underline;
         }
 
+        .login-methods {
+            display: flex;
+            justify-content: center;
+            gap: 0.85rem;
+            margin-top: 0.9rem;
+        }
+
+        .login-divider {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            color: #94a3b8;
+            font-size: 0.8rem;
+            font-weight: 800;
+            margin-top: 1.1rem;
+        }
+
+        .login-divider::before,
+        .login-divider::after {
+            content: "";
+            height: 1.5px;
+            flex: 1;
+            background: #e5eaf2;
+        }
+
+        .method-link {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            border: 1.5px solid #f2d8c8;
+            background: #ffffff;
+            color: #334155;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            font-weight: 800;
+            transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .method-link:hover {
+            transform: translateY(-2px);
+            border-color: #f97316;
+            color: #ea580c;
+            box-shadow: 0 12px 22px -18px rgba(249, 115, 22, 0.5);
+        }
+
+        .method-link.email-method {
+            color: #f97316;
+        }
+
+        .method-link.google-method {
+            color: #344054;
+        }
+
+        .method-link span {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
         /* responsif */
         @media (max-width: 480px) {
             .login-card {
@@ -387,30 +481,36 @@
             <div class="alert-message alert-success">
                 <i class="fas fa-check-circle"></i>
                 <span>{{ session('success') }}</span>
+                <button type="button" class="alert-close" aria-label="Tutup notifikasi">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
         @endif
 
-        @if ($errors->has('login'))
+        @if ($errors->has('login') || $errors->has('password_login'))
             <div class="alert-message alert-error">
                 <i class="fas fa-exclamation-triangle"></i>
-                <span>{{ $errors->first('login') }}</span>
+                <span>{{ $errors->first('login') ?: $errors->first('password_login') }}</span>
+                <button type="button" class="alert-close" aria-label="Tutup notifikasi">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
         @endif
 
-        <form action="{{ route('login.process') }}" method="POST" id="loginForm">
+        <form action="{{ route('login.password') }}" method="POST" id="loginForm">
             @csrf
 
-            <!-- Field Nama -->
+            <!-- Field Email -->
             <div class="input-group">
-                <label> Nama Lengkap</label>
-                <input type="text"
-                       id="nama"
-                       name="nama"
+                <label> Email</label>
+                <input type="email"
+                       id="login"
+                       name="login"
                        class="input-field"
-                       value="{{ old('nama') }}"
-                       placeholder="masukkan nama"
-                       autocomplete="name">
-                @error('nama')
+                       value="{{ old('login') }}"
+                       placeholder="masukkan email"
+                       autocomplete="email">
+                @error('login')
                 <div class="validation-text">
                     <i class="fas fa-circle-exclamation"></i> {{ $message }}
                 </div>
@@ -419,7 +519,7 @@
 
             <!-- Field Password + toggle -->
             <div class="input-group">
-                <label> Kata Sandi</label>
+                <label> Password</label>
                 <div class="password-wrapper">
                     <input type="password"
                            id="password"
@@ -449,6 +549,19 @@
                 <span id="loginSubmitText">Masuk Sekarang</span>
             </button>
         </form>
+
+        <div class="login-divider">atau masuk dengan</div>
+
+        <div class="login-methods">
+            <a href="{{ route('login.otp.email') }}" class="method-link email-method" title="Masuk dengan OTP Email" aria-label="Masuk dengan OTP Email">
+                <i class="fas fa-envelope-open-text"></i>
+                <span>Masuk dengan OTP Email</span>
+            </a>
+            <a href="{{ route('login.google.redirect') }}" class="method-link google-method" title="Login dengan Akun Google" aria-label="Login dengan Akun Google">
+                <i class="fab fa-google"></i>
+                <span>Login dengan Akun Google</span>
+            </a>
+        </div>
 
     </div>
 </div>
@@ -484,6 +597,15 @@
                 submitText.textContent = 'Memproses...';
             });
         }
+
+        document.querySelectorAll('.alert-close').forEach(function(closeButton) {
+            closeButton.addEventListener('click', function() {
+                const alert = closeButton.closest('.alert-message');
+                if (alert) {
+                    alert.remove();
+                }
+            });
+        });
     })();
 </script>
 </body>

@@ -6,6 +6,10 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [Control::class, 'dashboard'])->name('root');
 Route::get('/dashboard', [Control::class, 'dashboard'])->name('dashboard');
+Route::get('/profil-keamanan', [Control::class, 'profileSecurity'])->name('profile.security');
+Route::post('/profil-keamanan/profil', [Control::class, 'updateProfileIdentity'])->name('profile.identity.update');
+Route::post('/profil-keamanan/password', [Control::class, 'updateProfilePassword'])->name('profile.password.update');
+Route::post('/profil-keamanan/otp', [Control::class, 'updateProfileOtp'])->name('profile.otp.update');
 Route::get('/kelas-saya', [Control::class, 'classInventory'])->name('class.inventory');
 Route::get('/wali-kelas/kelas-saya', [Control::class, 'adminClassInventory'])->name('admin.class.inventory');
 Route::get('/ajukan-permintaan', [Control::class, 'createRequest'])->name('requests.create');
@@ -42,9 +46,17 @@ Route::get('/superadmin/laporan/export', [Control::class, 'superadminReportsExpo
 Route::get('/superadmin/hak-akses', [Control::class, 'hakAkses'])->name('hak_akses.index');
 Route::post('/superadmin/hak-akses', [Control::class, 'updateHakAkses'])->name('hak_akses.update');
 
-Route::get('/login', [Control::class, 'showLoginForm'])->name('login');
-Route::post('/login', [Control::class, 'processLogin'])->name('login.process');
-Route::post('/logout', [Control::class, 'logout'])->name('logout');
+Route::prefix('auth')->group(function () {
+    Route::get('/login', [Control::class, 'showLoginForm'])->name('login');
+    Route::post('/login/password', [Control::class, 'processLogin'])->name('login.password');
+    Route::get('/login/otp', [Control::class, 'showOtpEmailForm'])->name('login.otp.email');
+    Route::get('/login/otp/verify', [Control::class, 'showOtpVerifyForm'])->name('login.otp.verify.form');
+    Route::post('/login/otp/request', [Control::class, 'requestEmailOtp'])->name('login.otp.request');
+    Route::post('/login/otp/verify', [Control::class, 'verifyEmailOtp'])->name('login.otp.verify');
+    Route::get('/google/redirect', [Control::class, 'redirectToGoogle'])->name('login.google.redirect');
+    Route::get('/google/callback', [Control::class, 'handleGoogleCallback'])->name('login.google.callback');
+    Route::post('/logout', [Control::class, 'logout'])->name('logout');
+});
 
 Route::prefix('chatbot')->group(function () {
     Route::get('/context', [ChatbotController::class, 'context'])->name('chatbot.context');

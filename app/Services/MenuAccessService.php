@@ -111,6 +111,12 @@ class MenuAccessService
             'route' => 'owner.reports',
             'default_levels' => [4],
         ],
+        'profil_keamanan' => [
+            'label' => 'Profil & Keamanan',
+            'icon' => 'bi bi-person-gear',
+            'route' => 'profile.security',
+            'default_levels' => [1, 2, 3, 4],
+        ],
     ];
 
     public function levels(): array
@@ -212,11 +218,25 @@ class MenuAccessService
             ];
         }
 
+        if (! collect($menus)->contains('key', 'profil_keamanan')) {
+            $definition = self::MENU_DEFINITIONS['profil_keamanan'];
+            $menus[] = [
+                'key' => 'profil_keamanan',
+                'label' => $this->sidebarLabel('profil_keamanan'),
+                'icon' => $definition['icon'],
+                'route' => $definition['route'],
+            ];
+        }
+
         return $menus;
     }
 
     public function userCanAccessMenu(int $level, string $menuKey): bool
     {
+        if ($menuKey === 'profil_keamanan') {
+            return true;
+        }
+
         if ($level === 3 && $menuKey === 'hak_akses') {
             return true;
         }

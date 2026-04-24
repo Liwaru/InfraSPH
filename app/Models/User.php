@@ -34,6 +34,8 @@ class User extends Authenticatable
     protected $fillable = [
         'nis',
         'nama',
+        'email',
+        'otp_enabled',
         'password',
         'level',
     ];
@@ -56,6 +58,7 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'otp_enabled' => 'boolean',
         ];
     }
 }

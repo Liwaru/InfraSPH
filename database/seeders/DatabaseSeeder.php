@@ -20,24 +20,28 @@ class DatabaseSeeder extends Seeder
             [
                 'nis' => null,
                 'nama' => 'owner',
+                'email' => 'owner@infrasph.test',
                 'password' => Hash::make('owner123'),
                 'level' => 4,
             ],
             [
                 'nis' => null,
                 'nama' => 'superadmin',
+                'email' => 'superadmin@infrasph.test',
                 'password' => Hash::make('superadmin123'),
                 'level' => 3,
             ],
             [
                 'nis' => null,
                 'nama' => 'admin',
+                'email' => 'admin@infrasph.test',
                 'password' => Hash::make('admin123'),
                 'level' => 2,
             ],
             [
                 'nis' => '24161033',
                 'nama' => 'Hendrik',
+                'email' => 'hendrik@infrasph.test',
                 'password' => Hash::make('hendrik123'),
                 'level' => 1,
             ],

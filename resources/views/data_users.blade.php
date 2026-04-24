@@ -652,7 +652,7 @@
                     <form method="GET" action="{{ route('superadmin.users') }}" class="filter-form">
                         <div class="filter-field">
                             <label for="searchUser">Search Nama / NIS</label>
-                            <input id="searchUser" type="text" name="q" value="{{ $filters['q'] }}" placeholder="Cari nama user atau NIS">
+                            <input id="searchUser" type="text" name="q" value="{{ $filters['q'] }}" placeholder="Cari nama, email, atau NIS">
                         </div>
                         <div class="filter-field">
                             <label for="roleFilter">Filter Role</label>
@@ -727,6 +727,7 @@
                                 <thead>
                                     <tr>
                                         <th>Nama</th>
+                                        <th>Email</th>
                                         <th>NIS</th>
                                         <th>Role</th>
                                         <th>Ruangan/Kelas</th>
@@ -743,6 +744,7 @@
                                                     ID User: {{ $row['id_user'] }}
                                                 </div>
                                             </td>
+                                            <td>{{ $row['email_label'] }}</td>
                                             <td>{{ $row['nis'] }}</td>
                                             <td>
                                                 <span class="pill {{ $row['role_class'] }}">{{ $row['role_label'] }}</span>
@@ -860,6 +862,10 @@
                         <input id="createNis" type="text" name="nis" value="{{ session('modal') === 'create-user' ? old('nis') : '' }}" placeholder="Opsional">
                     </div>
                     <div class="field-group">
+                        <label for="createEmail">Email</label>
+                        <input id="createEmail" type="email" name="email" value="{{ session('modal') === 'create-user' ? old('email') : '' }}" required>
+                    </div>
+                    <div class="field-group">
                         <label for="createRole">Role</label>
                         <select id="createRole" name="level" required>
                             <option value="">Pilih role</option>
@@ -922,6 +928,10 @@
                         <div class="field-group">
                             <label for="editNis{{ $row['id_user'] }}">NIS</label>
                             <input id="editNis{{ $row['id_user'] }}" type="text" name="nis" value="{{ $isEditModalOpen ? old('nis', $row['nis_raw']) : $row['nis_raw'] }}" placeholder="Opsional">
+                        </div>
+                        <div class="field-group">
+                            <label for="editEmail{{ $row['id_user'] }}">Email</label>
+                            <input id="editEmail{{ $row['id_user'] }}" type="email" name="email" value="{{ $isEditModalOpen ? old('email', $row['email']) : $row['email'] }}" required>
                         </div>
                         <div class="field-group">
                             <label for="editRole{{ $row['id_user'] }}">Role</label>

@@ -10,6 +10,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 
@@ -46,7 +48,7 @@ class Control extends Controller
                     'title' => 'Pengajuan Terbaru',
                     'items' => [
                         'Perbaikan kipas angin - Menunggu verifikasi wali kelas',
-                        'Penambahan kursi siswa - Menunggu persetujuan owner',
+                        'Penambahan kursi siswa - Menunggu persetujuan kepala sekolah',
                         'Penggantian lampu kelas - Selesai direalisasikan',
                     ],
                 ],
@@ -72,8 +74,8 @@ class Control extends Controller
                     'title' => 'Prioritas Verifikasi',
                     'items' => [
                         'Tinjau pengajuan dari kelas yang membutuhkan tindakan cepat.',
-                        'Cek kelengkapan alasan dan jumlah barang yang diajukan user.',
-                        'Pastikan pengajuan layak diteruskan ke owner.',
+                        'Cek kelengkapan alasan dan jumlah barang yang diajukan ketua kelas.',
+                        'Pastikan pengajuan layak diteruskan ke kepala sekolah.',
                     ],
                 ],
                 [
@@ -81,13 +83,13 @@ class Control extends Controller
                     'items' => [
                         'Kelas 7A mengajukan perbaikan proyektor.',
                         'Kelas 8B mengajukan penambahan meja guru.',
-                        'Kelas 9C menunggu tindak lanjut owner.',
+                        'Kelas 9C menunggu tindak lanjut kepala sekolah.',
                     ],
                 ],
             ],
         ],
         3 => [
-            'role_name' => 'Pengelola Sistem',
+            'role_name' => 'Superadmin',
             'headline' => 'Kelola data master, pantau sistem, dan realisasikan pengajuan yang sudah disetujui.',
             'summary_cards' => [
                 ['label' => 'Total User', 'value' => '36 Akun', 'tone' => 'soft'],
@@ -96,7 +98,7 @@ class Control extends Controller
                 ['label' => 'Aktivitas Sistem', 'value' => '12 Update', 'tone' => 'soft'],
             ],
             'quick_actions' => [
-                'Kelola data user',
+                'Kelola data akun',
                 'Kelola data ruangan',
                 'Kelola inventaris',
                 'Realisasikan pengajuan',
@@ -114,7 +116,7 @@ class Control extends Controller
                     'title' => 'Aktivitas Operasional',
                     'items' => [
                         'Update inventaris ruang laboratorium selesai dilakukan.',
-                        'Reset password dua akun user berhasil diproses.',
+                        'Reset password dua akun berhasil diproses.',
                         'Realisasi pengajuan kursi kelas RPL XI sedang berlangsung.',
                     ],
                 ],
@@ -188,6 +190,10 @@ class Control extends Controller
         'owner.requests.reject' => 'persetujuan_pengajuan',
         'owner.reports' => 'laporan_owner',
         'owner.reports.export' => 'laporan_owner',
+        'profile.security' => 'profil_keamanan',
+        'profile.identity.update' => 'profil_keamanan',
+        'profile.password.update' => 'profil_keamanan',
+        'profile.otp.update' => 'profil_keamanan',
     ];
 
     public function __construct()
@@ -226,7 +232,13 @@ class Control extends Controller
      */
     public function showLoginForm(): View|RedirectResponse
     {
-        return view('login');
+        if (session('logged_in')) {
+            return redirect()->route('dashboard');
+        }
+
+        return view('login', [
+            'googleLoginReady' => $this->googleLoginReady(),
+        ]);
     }
 
     /**
@@ -235,33 +247,302 @@ class Control extends Controller
     public function processLogin(Request $request): RedirectResponse
     {
         $credentials = $request->validate([
-            'nama' => ['required', 'string'],
+            'login' => ['required', 'email', 'max:255'],
             'password' => ['required', 'string'],
         ], [
-            'nama.required' => 'Nama wajib diisi.',
+            'login.required' => 'Email wajib diisi.',
+            'login.email' => 'Format email tidak valid.',
             'password.required' => 'Password wajib diisi.',
         ]);
 
-        $user = User::where('nama', $credentials['nama'])->first();
+        $user = $this->resolveLoginUser($credentials['login']);
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             return back()
-                ->withInput($request->only('nama'))
+                ->withInput($request->only('login'))
+                ->with('active_login_method', 'password')
                 ->withErrors([
-                    'login' => 'Nama atau password salah.',
+                    'password_login' => 'Email atau password salah.',
                 ]);
         }
 
-        $request->session()->regenerate();
-        session([
-            'logged_in' => true,
-            'user' => [
-                'id_user' => $user->id_user,
-                'nis' => $user->nis,
-                'nama' => $user->nama,
-                'level' => $user->level,
-            ],
+        if ((bool) ($user->otp_enabled ?? false)) {
+            try {
+                $this->sendLoginOtp($request, $user);
+        } catch (\Throwable $exception) {
+            $otpErrorMessage = $exception->getMessage() === 'OTP request limit exceeded.'
+                ? 'Terlalu banyak permintaan OTP. Tunggu 5 menit sebelum meminta kode baru.'
+                : 'OTP gagal dikirim ke email. Periksa email akun atau konfigurasi mailer.';
+
+            return back()
+                ->withInput($request->only('login'))
+                ->withErrors([
+                    'password_login' => $otpErrorMessage,
+                ]);
+        }
+
+            return redirect()
+                ->route('login.otp.verify.form')
+                ->with('success', 'Kode OTP sudah dikirim ke email akun Anda.');
+        }
+
+        $this->storeAuthenticatedSession($request, $user);
+
+        return redirect()->route('dashboard');
+    }
+
+    public function showOtpEmailForm(): View|RedirectResponse
+    {
+        if (session('logged_in')) {
+            return redirect()->route('dashboard');
+        }
+
+        return view('login_otp_email');
+    }
+
+    public function showOtpVerifyForm(Request $request): View|RedirectResponse
+    {
+        if (session('logged_in')) {
+            return redirect()->route('dashboard');
+        }
+
+        if (! session('otp_login_email')) {
+            return redirect()->route('login.otp.email');
+        }
+
+        if (session('otp_send_on_verify')) {
+            $user = User::find((int) session('otp_login_user_id'));
+
+            if (! $user) {
+                $request->session()->forget(['otp_login_email', 'otp_login_user_id', 'otp_send_on_verify', 'otp_login_expires_at']);
+
+                return redirect()
+                    ->route('login.otp.email')
+                    ->withErrors([
+                        'otp_email' => 'Akun OTP tidak ditemukan. Masukkan email kembali.',
+                    ]);
+            }
+
+            try {
+                $this->sendLoginOtp($request, $user);
+                $request->session()->forget('otp_send_on_verify');
+                $request->session()->flash('success', 'Kode OTP berhasil dikirim. Cek inbox email sekolah Anda.');
+            } catch (\Throwable $exception) {
+                $request->session()->forget(['otp_login_email', 'otp_login_user_id', 'otp_send_on_verify', 'otp_login_expires_at']);
+
+                $otpErrorMessage = $exception->getMessage() === 'OTP request limit exceeded.'
+                    ? 'Terlalu banyak permintaan OTP. Tunggu 5 menit sebelum meminta kode baru.'
+                    : 'OTP gagal dikirim ke email. Periksa konfigurasi mailer sekolah.';
+
+                return redirect()
+                    ->route('login.otp.email')
+                    ->withErrors([
+                        'otp_email' => $otpErrorMessage,
+                    ]);
+            }
+        }
+
+        return view('login_otp_verify', [
+            'email' => session('otp_login_email'),
+            'expiresAt' => session('otp_login_expires_at'),
         ]);
+    }
+
+    public function requestEmailOtp(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'otp_email' => ['required', 'email', 'max:255'],
+        ], [
+            'otp_email.required' => 'Email wajib diisi untuk menerima OTP.',
+            'otp_email.email' => 'Format email tidak valid.',
+        ]);
+
+        if (! Schema::hasColumn('users', 'email') || ! Schema::hasTable('login_otps')) {
+            return back()
+                ->withInput($request->only('otp_email'))
+                ->with('active_login_method', 'otp')
+                ->withErrors([
+                    'otp_email' => 'Fitur OTP belum siap. Jalankan migrasi tabel email dan OTP terlebih dahulu.',
+                ]);
+        }
+
+        $email = strtolower(trim($validated['otp_email']));
+        $user = $this->findUserByEmail($email);
+
+        if (! $user) {
+            return back()
+                ->withInput($request->only('otp_email'))
+                ->with('active_login_method', 'otp')
+                ->withErrors([
+                    'otp_email' => 'Email ini belum terdaftar sebagai akun InfraSPH.',
+                ]);
+        }
+
+        $request->session()->put('otp_login_email', $email);
+        $request->session()->put('otp_login_user_id', $user->id_user);
+        $request->session()->put('otp_send_on_verify', true);
+        $request->session()->forget('otp_login_expires_at');
+
+        return redirect()
+            ->route('login.otp.verify.form')
+            ->with('success', 'Membuka halaman verifikasi OTP.');
+    }
+
+    public function verifyEmailOtp(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'otp_email' => ['required', 'email', 'max:255'],
+            'otp_code' => ['required', 'digits:6'],
+        ], [
+            'otp_email.required' => 'Email wajib diisi.',
+            'otp_email.email' => 'Format email tidak valid.',
+            'otp_code.required' => 'Kode OTP wajib diisi.',
+            'otp_code.digits' => 'Kode OTP harus berisi 6 digit.',
+        ]);
+
+        if (! Schema::hasColumn('users', 'email') || ! Schema::hasTable('login_otps')) {
+            return back()
+                ->withInput($request->only('otp_email'))
+                ->with('active_login_method', 'otp')
+                ->withErrors([
+                    'otp_email' => 'Fitur OTP belum siap. Jalankan migrasi tabel email dan OTP terlebih dahulu.',
+                ]);
+        }
+
+        $email = strtolower(trim($validated['otp_email']));
+        $otpRecord = DB::table('login_otps')
+            ->where('email', $email)
+            ->where('purpose', 'login')
+            ->whereNull('used_at')
+            ->where('expires_at', '>=', now())
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $otpRecord || ! Hash::check($validated['otp_code'], $otpRecord->otp_code)) {
+            return back()
+                ->withInput($request->only('otp_email'))
+                ->with('active_login_method', 'otp')
+                ->withErrors([
+                    'otp_code' => 'Kode OTP salah atau sudah tidak berlaku.',
+                ]);
+        }
+
+        $user = User::find($otpRecord->id_user);
+
+        if (! $user) {
+            return back()
+                ->withInput($request->only('otp_email'))
+                ->with('active_login_method', 'otp')
+                ->withErrors([
+                    'otp_email' => 'Akun yang terhubung dengan OTP ini tidak ditemukan.',
+                ]);
+        }
+
+        DB::table('login_otps')
+            ->where('id', $otpRecord->id)
+            ->update([
+                'used_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+        $request->session()->forget(['otp_login_email', 'otp_login_user_id', 'otp_send_on_verify', 'otp_login_expires_at']);
+        $this->storeAuthenticatedSession($request, $user);
+
+        return redirect()->route('dashboard');
+    }
+
+    public function redirectToGoogle(): RedirectResponse
+    {
+        if (! $this->googleLoginReady()) {
+            return redirect()
+                ->route('login')
+                ->with('active_login_method', 'google')
+                ->withErrors([
+                    'google' => 'Google login belum aktif. Tambahkan konfigurasi Google OAuth dan package Socialite terlebih dahulu.',
+                ]);
+        }
+
+        return \Laravel\Socialite\Facades\Socialite::driver('google')->redirect();
+    }
+
+    public function handleGoogleCallback(Request $request): RedirectResponse
+    {
+        if (! $this->googleLoginReady()) {
+            return redirect()
+                ->route('login')
+                ->with('active_login_method', 'google')
+                ->withErrors([
+                    'google' => 'Google login belum aktif di server ini.',
+                ]);
+        }
+
+        try {
+            $googleUser = \Laravel\Socialite\Facades\Socialite::driver('google')->stateless()->user();
+        } catch (\Throwable $exception) {
+            return redirect()
+                ->route('login')
+                ->with('active_login_method', 'google')
+                ->withErrors([
+                    'google' => 'Autentikasi Google gagal diproses. Coba lagi beberapa saat lagi.',
+                ]);
+        }
+
+        if (! Schema::hasColumn('users', 'email') || ! Schema::hasTable('social_accounts')) {
+            return redirect()
+                ->route('login')
+                ->with('active_login_method', 'google')
+                ->withErrors([
+                    'google' => 'Tabel email atau social account belum tersedia. Jalankan migrasi terlebih dahulu.',
+                ]);
+        }
+
+        $providerId = (string) $googleUser->getId();
+        $email = strtolower(trim((string) $googleUser->getEmail()));
+
+        if ($providerId === '' || $email === '') {
+            return redirect()
+                ->route('login')
+                ->with('active_login_method', 'google')
+                ->withErrors([
+                    'google' => 'Google tidak mengirimkan identitas email yang bisa dipakai untuk login.',
+                ]);
+        }
+
+        $linkedAccount = DB::table('social_accounts')
+            ->where('provider', 'google')
+            ->where('provider_id', $providerId)
+            ->first();
+
+        $user = $linkedAccount
+            ? User::find($linkedAccount->id_user)
+            : $this->findUserByEmail($email);
+
+        if (! $user) {
+            return redirect()
+                ->route('login')
+                ->with('active_login_method', 'google')
+                ->withErrors([
+                    'google' => 'Email Google ini belum terdaftar sebagai akun InfraSPH.',
+                ]);
+        }
+
+        DB::table('social_accounts')->updateOrInsert(
+            [
+                'provider' => 'google',
+                'provider_id' => $providerId,
+            ],
+            [
+                'id_user' => $user->id_user,
+                'provider_email' => $email,
+                'provider_name' => $googleUser->getName(),
+                'avatar_url' => $googleUser->getAvatar(),
+                'last_login_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        $this->storeAuthenticatedSession($request, $user);
 
         return redirect()->route('dashboard');
     }
@@ -282,6 +563,144 @@ class Control extends Controller
             'user' => $user,
             'dashboard' => $dashboard,
         ]);
+    }
+
+    public function profileSecurity(): View|RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $sessionUser = (array) session('user');
+        $userModel = User::find((int) ($sessionUser['id_user'] ?? 0));
+
+        if (! $userModel) {
+            session()->forget(['logged_in', 'user']);
+            return redirect()->route('login');
+        }
+
+        $this->storeAuthenticatedSession(request(), $userModel);
+        $user = (array) session('user');
+        $dashboard = $this->resolveDashboardData($user);
+        $assignments = $this->getActiveAssignmentsForUser($user)
+            ->map(function ($assignment) {
+                return [
+                    'nama_ruangan' => $assignment->nama_ruangan ?? '-',
+                    'kode_ruangan' => $assignment->kode_ruangan ?? '-',
+                    'jenis_ruangan' => $assignment->jenis_ruangan ?? '-',
+                    'peran_ruangan' => $this->formatAssignmentRole((string) ($assignment->peran_ruangan ?? '')),
+                ];
+            })
+            ->values()
+            ->all();
+
+        return view('profile_security', [
+            'user' => $user,
+            'dashboard' => $dashboard,
+            'assignments' => $assignments,
+            'canEditIdentity' => (int) ($user['level'] ?? 0) === 2,
+            'googleLoginReady' => $this->googleLoginReady(),
+        ]);
+    }
+
+    public function updateProfileIdentity(Request $request): RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $sessionUser = (array) session('user');
+
+        if ((int) ($sessionUser['level'] ?? 0) !== 2) {
+            return redirect()->route('profile.security')->with('error', 'Nama dan email hanya bisa diubah dari profil wali kelas.');
+        }
+
+        $userModel = User::find((int) ($sessionUser['id_user'] ?? 0));
+
+        if (! $userModel) {
+            return redirect()->route('login');
+        }
+
+        $validated = $request->validate([
+            'nama' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email,'.$userModel->id_user.',id_user'],
+        ], [
+            'nama.required' => 'Nama wajib diisi.',
+            'email.required' => 'Email wajib diisi.',
+            'email.email' => 'Format email tidak valid.',
+            'email.unique' => 'Email ini sudah dipakai akun lain.',
+        ]);
+
+        $userModel->forceFill([
+            'nama' => $validated['nama'],
+            'email' => strtolower(trim($validated['email'])),
+        ])->save();
+
+        $this->storeAuthenticatedSession($request, $userModel->fresh());
+
+        return redirect()->route('profile.security')->with('success', 'Profil wali kelas berhasil diperbarui.');
+    }
+
+    public function updateProfilePassword(Request $request): RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $userModel = User::find((int) ((array) session('user'))['id_user']);
+
+        if (! $userModel) {
+            return redirect()->route('login');
+        }
+
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ], [
+            'current_password.required' => 'Password lama wajib diisi.',
+            'password.required' => 'Password baru wajib diisi.',
+            'password.min' => 'Password baru minimal 6 karakter.',
+            'password.confirmed' => 'Konfirmasi password baru tidak sama.',
+        ]);
+
+        if (! Hash::check($validated['current_password'], $userModel->password)) {
+            return back()->withErrors([
+                'current_password' => 'Password lama tidak sesuai.',
+            ]);
+        }
+
+        $userModel->forceFill([
+            'password' => Hash::make($validated['password']),
+        ])->save();
+
+        return redirect()->route('profile.security')->with('success', 'Password berhasil diperbarui.');
+    }
+
+    public function updateProfileOtp(Request $request): RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $userModel = User::find((int) ((array) session('user'))['id_user']);
+
+        if (! $userModel) {
+            return redirect()->route('login');
+        }
+
+        if (! filled((string) $userModel->email)) {
+            return redirect()->route('profile.security')->with('error', 'Isi email akun terlebih dahulu sebelum mengaktifkan OTP.');
+        }
+
+        $userModel->forceFill([
+            'otp_enabled' => $request->boolean('otp_enabled'),
+        ])->save();
+
+        $this->storeAuthenticatedSession($request, $userModel->fresh());
+
+        return redirect()
+            ->route('profile.security')
+            ->with('success', $userModel->otp_enabled ? 'OTP email saat login sudah aktif.' : 'OTP email saat login sudah dinonaktifkan.');
     }
 
     public function classInventory(): View|RedirectResponse
@@ -648,11 +1067,12 @@ class Control extends Controller
         }
 
         $usersQuery = DB::table('users as u')
-            ->select('u.id_user', 'u.nis', 'u.nama', 'u.level')
+            ->select('u.id_user', 'u.nis', 'u.nama', 'u.email', 'u.level')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('u.nama', 'like', '%'.$search.'%')
-                        ->orWhere('u.nis', 'like', '%'.$search.'%');
+                        ->orWhere('u.nis', 'like', '%'.$search.'%')
+                        ->orWhere('u.email', 'like', '%'.$search.'%');
                 });
             })
             ->when($role !== 'semua', fn ($query) => $query->where('u.level', (int) $role))
@@ -722,6 +1142,8 @@ class Control extends Controller
                 return [
                     'id_user' => (int) $row->id_user,
                     'nama' => (string) $row->nama,
+                    'email' => (string) ($row->email ?? ''),
+                    'email_label' => filled($row->email) ? (string) $row->email : 'Belum diisi',
                     'nis' => filled($row->nis) ? (string) $row->nis : '-',
                     'nis_raw' => (string) ($row->nis ?? ''),
                     'level' => (int) $row->level,
@@ -776,11 +1198,15 @@ class Control extends Controller
 
         $validator = Validator::make($request->all(), [
             'nama' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'nis' => ['nullable', 'string', 'max:50', 'unique:users,nis'],
             'level' => ['required', 'integer', 'in:1,2,3,4'],
             'password' => ['required', 'string', 'min:6'],
         ], [
             'nama.required' => 'Nama user wajib diisi.',
+            'email.required' => 'Email user wajib diisi.',
+            'email.email' => 'Format email tidak valid.',
+            'email.unique' => 'Email sudah dipakai user lain.',
             'nis.unique' => 'NIS sudah dipakai user lain.',
             'level.required' => 'Role user wajib dipilih.',
             'password.required' => 'Password wajib diisi.',
@@ -797,6 +1223,7 @@ class Control extends Controller
 
         $payload = [
             'nama' => trim((string) $request->input('nama')),
+            'email' => strtolower(trim((string) $request->input('email'))),
             'nis' => $this->nullableTrimmed($request->input('nis')),
             'level' => (int) $request->input('level'),
             'password' => Hash::make((string) $request->input('password')),
@@ -831,11 +1258,15 @@ class Control extends Controller
 
         $validator = Validator::make($request->all(), [
             'nama' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email,'.$userId.',id_user'],
             'nis' => ['nullable', 'string', 'max:50', 'unique:users,nis,'.$userId.',id_user'],
             'level' => ['required', 'integer', 'in:1,2,3,4'],
             'password' => ['nullable', 'string', 'min:6'],
         ], [
             'nama.required' => 'Nama user wajib diisi.',
+            'email.required' => 'Email user wajib diisi.',
+            'email.email' => 'Format email tidak valid.',
+            'email.unique' => 'Email sudah dipakai user lain.',
             'nis.unique' => 'NIS sudah dipakai user lain.',
             'level.required' => 'Role user wajib dipilih.',
             'password.min' => 'Password minimal 6 karakter.',
@@ -851,6 +1282,7 @@ class Control extends Controller
 
         $payload = [
             'nama' => trim((string) $request->input('nama')),
+            'email' => strtolower(trim((string) $request->input('email'))),
             'nis' => $this->nullableTrimmed($request->input('nis')),
             'level' => (int) $request->input('level'),
         ];
@@ -867,7 +1299,10 @@ class Control extends Controller
                     'id_user' => $userId,
                     'nis' => $payload['nis'],
                     'nama' => $payload['nama'],
+                    'email' => $payload['email'],
+                    'otp_enabled' => (bool) ($targetUser->otp_enabled ?? false),
                     'level' => $payload['level'],
+                    'role_label' => $this->formatUserLevelLabel((int) $payload['level']),
                 ],
             ]);
 
@@ -4126,7 +4561,7 @@ class Control extends Controller
         return [
             1 => 'Ketua Kelas',
             2 => 'Wali Kelas',
-            3 => 'Pengelola Sistem',
+            3 => 'Superadmin',
             4 => 'Kepala Sekolah',
         ];
     }
@@ -4365,6 +4800,131 @@ class Control extends Controller
             'date' => trim((string) $request->input('date_filter', $request->query('date', ''))),
             'q' => trim((string) $request->input('q', $request->query('q', ''))),
         ];
+    }
+
+    private function resolveLoginUser(string $login): ?User
+    {
+        $login = trim($login);
+
+        if ($login === '' || ! Schema::hasColumn('users', 'email')) {
+            return null;
+        }
+
+        return User::query()
+            ->whereRaw($this->normalizedEmailSql('email').' = ?', [strtolower($login)])
+            ->first();
+    }
+
+    private function findUserByEmail(string $email): ?User
+    {
+        $email = strtolower(trim($email));
+
+        if ($email === '') {
+            return null;
+        }
+
+        return User::query()
+            ->whereRaw($this->normalizedEmailSql('email').' = ?', [$email])
+            ->first();
+    }
+
+    private function normalizedEmailSql(string $column): string
+    {
+        return "LOWER(TRIM(REPLACE(REPLACE({$column}, CHAR(13), ''), CHAR(10), '')))";
+    }
+
+    private function sendLoginOtp(Request $request, User $user): void
+    {
+        $email = strtolower(trim((string) $user->email));
+
+        if ($email === '') {
+            throw new \RuntimeException('User email is empty.');
+        }
+
+        $recentOtpCount = DB::table('login_otps')
+            ->where('email', $email)
+            ->where('purpose', 'login')
+            ->where('created_at', '>=', now()->subMinutes(5))
+            ->count();
+
+        if ($recentOtpCount >= 3) {
+            throw new \RuntimeException('OTP request limit exceeded.');
+        }
+
+        $otp = (string) random_int(100000, 999999);
+        $now = now();
+        $expiresAt = $now->copy()->addMinutes(5);
+
+        DB::table('login_otps')
+            ->where('email', $email)
+            ->whereNull('used_at')
+            ->update([
+                'used_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        DB::table('login_otps')->insert([
+            'id_user' => $user->id_user,
+            'email' => $email,
+            'otp_code' => Hash::make($otp),
+            'purpose' => 'login',
+            'expires_at' => $expiresAt,
+            'requested_ip' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 255),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        Mail::raw(
+            "Kode OTP login InfraSPH Anda adalah {$otp}. Kode ini berlaku selama 5 menit.",
+            function ($message) use ($email) {
+                $message->to($email)->subject('Kode OTP Login InfraSPH');
+            }
+        );
+
+        $request->session()->put('otp_login_email', $email);
+        $request->session()->put('otp_login_expires_at', $expiresAt->toIso8601String());
+    }
+
+    private function formatAssignmentRole(string $role): string
+    {
+        $role = trim(str_replace(['_', '-'], ' ', $role));
+
+        if ($role === '') {
+            return 'Penugasan Ruangan';
+        }
+
+        return ucwords($role);
+    }
+
+    private function storeAuthenticatedSession(Request $request, User $user): void
+    {
+        $request->session()->regenerate();
+        session([
+            'logged_in' => true,
+            'user' => [
+                'id_user' => $user->id_user,
+                'nis' => $user->nis,
+                'nama' => $user->nama,
+                'email' => $user->email ?? null,
+                'otp_enabled' => (bool) ($user->otp_enabled ?? false),
+                'level' => $user->level,
+                'role_label' => $this->formatUserLevelLabel((int) $user->level),
+            ],
+        ]);
+    }
+
+    private function googleLoginReady(): bool
+    {
+        if (! class_exists(\Laravel\Socialite\Facades\Socialite::class)) {
+            return false;
+        }
+
+        $clientId = trim((string) config('services.google.client_id'));
+        $clientSecret = trim((string) config('services.google.client_secret'));
+        $redirect = trim((string) config('services.google.redirect'));
+
+        return $clientId !== '' && $clientSecret !== '' && $redirect !== '';
     }
 
     /**
