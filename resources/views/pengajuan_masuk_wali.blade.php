@@ -233,6 +233,94 @@
             line-height: 1.7;
         }
 
+        .damage-photo-card {
+            padding: 0.95rem 1rem;
+            border-radius: 20px;
+            background: #fffdfb;
+            border: 1px solid #f3e3db;
+            margin-bottom: 1rem;
+        }
+
+        .damage-photo-title {
+            font-size: 0.82rem;
+            color: #6b7280;
+            font-weight: 700;
+            margin-bottom: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .damage-photo-link {
+            display: inline-block;
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid #f6d7c5;
+            background: #fff8f4;
+            cursor: zoom-in;
+        }
+
+        .damage-photo-img {
+            display: block;
+            width: min(100%, 360px);
+            max-height: 240px;
+            object-fit: cover;
+        }
+
+        .photo-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1.2rem;
+            background: rgba(15, 23, 42, 0.62);
+            z-index: 1600;
+        }
+
+        .photo-modal-backdrop.open {
+            display: flex;
+        }
+
+        .photo-modal {
+            position: relative;
+            width: auto;
+            max-width: min(94vw, 1100px);
+            max-height: 90vh;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            padding: 0;
+            box-shadow: none;
+        }
+
+        .photo-modal-close {
+            position: absolute;
+            top: -16px;
+            right: -16px;
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.75);
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.92);
+            color: var(--brand-orange);
+            cursor: pointer;
+            box-shadow: 0 18px 38px -20px rgba(15, 23, 42, 0.55);
+            z-index: 1;
+        }
+
+        .photo-modal-img {
+            display: block;
+            max-width: min(94vw, 1100px);
+            max-height: 86vh;
+            object-fit: contain;
+            border-radius: 12px;
+            background: transparent;
+            box-shadow: 0 28px 72px -32px rgba(15, 23, 42, 0.85);
+        }
+
         .flow-row {
             display: flex;
             flex-wrap: wrap;
@@ -458,6 +546,15 @@
                                     <div class="reason-copy">{{ $request['alasan'] }}</div>
                                 </div>
 
+                                @if (! empty($request['foto_kerusakan']))
+                                    <div class="damage-photo-card">
+                                        <div class="damage-photo-title">Foto Kerusakan</div>
+                                        <button type="button" class="damage-photo-link js-photo-preview" data-photo-src="{{ asset('storage/'.$request['foto_kerusakan']) }}" data-photo-title="Foto kerusakan {{ $request['barang_ringkas'] }}">
+                                            <img src="{{ asset('storage/'.$request['foto_kerusakan']) }}" alt="Foto kerusakan {{ $request['barang_ringkas'] }}" class="damage-photo-img">
+                                        </button>
+                                    </div>
+                                @endif
+
                                 <div class="flow-row">
                                     @foreach ($request['flow'] as $flow)
                                         <span class="flow-chip {{ $flow['status'] }}">
@@ -522,10 +619,22 @@
     </div>
     @include('chatbot')
 
+    <div class="photo-modal-backdrop" id="damagePhotoModal" aria-hidden="true">
+        <section class="photo-modal" role="dialog" aria-modal="true" aria-label="Foto Kerusakan">
+            <button type="button" class="photo-modal-close" id="damagePhotoClose" aria-label="Tutup foto">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            <img src="" alt="Foto kerusakan" class="photo-modal-img" id="damagePhotoImage">
+        </section>
+    </div>
+
     <script>
         (function () {
             const toggleButtons = document.querySelectorAll('.toggle-reject-form');
             const closeButtons = document.querySelectorAll('.close-reject-form');
+            const photoModal = document.getElementById('damagePhotoModal');
+            const photoImage = document.getElementById('damagePhotoImage');
+            const photoClose = document.getElementById('damagePhotoClose');
 
             toggleButtons.forEach(function (button) {
                 button.addEventListener('click', function () {
@@ -544,6 +653,45 @@
                         form.classList.remove('active');
                     }
                 });
+            });
+
+            function openPhotoModal(button) {
+                if (!photoModal || !photoImage) {
+                    return;
+                }
+
+                photoImage.src = button.dataset.photoSrc || '';
+                photoImage.alt = button.dataset.photoTitle || 'Foto kerusakan';
+                photoModal.classList.add('open');
+                photoModal.setAttribute('aria-hidden', 'false');
+            }
+
+            function closePhotoModal() {
+                if (!photoModal || !photoImage) {
+                    return;
+                }
+
+                photoModal.classList.remove('open');
+                photoModal.setAttribute('aria-hidden', 'true');
+                photoImage.src = '';
+            }
+
+            document.querySelectorAll('.js-photo-preview').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    openPhotoModal(button);
+                });
+            });
+
+            photoClose?.addEventListener('click', closePhotoModal);
+            photoModal?.addEventListener('click', function (event) {
+                if (event.target === photoModal) {
+                    closePhotoModal();
+                }
+            });
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && photoModal?.classList.contains('open')) {
+                    closePhotoModal();
+                }
             });
         })();
     </script>

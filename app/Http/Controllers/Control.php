@@ -101,7 +101,6 @@ class Control extends Controller
                 'Kelola data akun',
                 'Kelola data ruangan',
                 'Kelola inventaris',
-                'Buka chatbot operasional',
                 'Realisasikan pengajuan',
             ],
             'panels' => [
@@ -176,9 +175,9 @@ class Control extends Controller
         'superadmin.rooms.delete' => 'data_ruangan',
         'superadmin.items' => 'data_inventaris',
         'superadmin.items.store' => 'data_inventaris',
+        'superadmin.items.copy' => 'data_inventaris',
         'superadmin.items.update' => 'data_inventaris',
         'superadmin.items.delete' => 'data_inventaris',
-        'superadmin.chatbot' => 'chatbot_superadmin',
         'superadmin.requests.realization' => 'tindak_lanjut_pengajuan',
         'superadmin.requests.realization.store' => 'tindak_lanjut_pengajuan',
         'superadmin.reports' => 'laporan_superadmin',
@@ -193,6 +192,7 @@ class Control extends Controller
         'owner.reports' => 'laporan_owner',
         'owner.reports.export' => 'laporan_owner',
         'activity.logs' => 'catatan_aktivitas',
+        'activity.data.restore' => 'catatan_aktivitas',
         'profile.show' => 'profil_keamanan',
         'security.show' => 'profil_keamanan',
         'profile.password.edit' => 'profil_keamanan',
@@ -213,10 +213,12 @@ class Control extends Controller
         'superadmin.rooms.update' => ['action' => 'Mengubah', 'module' => 'Data Ruangan', 'target_param' => 'roomId', 'detail' => 'Mengubah data ruangan.'],
         'superadmin.rooms.delete' => ['action' => 'Menghapus', 'module' => 'Data Ruangan', 'target_param' => 'roomId', 'detail' => 'Menghapus data ruangan.'],
         'superadmin.items.store' => ['action' => 'Menambah', 'module' => 'Inventaris', 'target_input' => 'nama_barang', 'detail' => 'Menambahkan data barang inventaris.'],
+        'superadmin.items.copy' => ['action' => 'Menambah', 'module' => 'Inventaris', 'target_input' => 'source_room_id', 'detail' => 'Menyalin data barang dari satu ruangan ke ruangan lain.'],
         'superadmin.items.update' => ['action' => 'Mengubah', 'module' => 'Inventaris', 'target_param' => 'inventoryId', 'detail' => 'Mengubah data barang inventaris.'],
         'superadmin.items.delete' => ['action' => 'Menghapus', 'module' => 'Inventaris', 'target_param' => 'inventoryId', 'detail' => 'Menghapus data barang inventaris.'],
         'superadmin.requests.realization.store' => ['action' => 'Merealisasikan', 'module' => 'Pengajuan', 'target_param' => 'requestId', 'detail' => 'Merealisasikan pengajuan menjadi inventaris.'],
         'hak_akses.update' => ['action' => 'Mengubah', 'module' => 'Hak Akses', 'detail' => 'Memperbarui hak akses menu.'],
+        'activity.data.restore' => ['action' => 'Memulihkan', 'module' => 'Catatan Aktivitas', 'target_param' => 'archiveId', 'detail' => 'Memulihkan data dari arsip catatan aktivitas.'],
         'requests.store' => ['action' => 'Menambah', 'module' => 'Pengajuan', 'target_input' => 'request_type', 'detail' => 'Membuat pengajuan baru.'],
         'requests.destroy' => ['action' => 'Menghapus', 'module' => 'Pengajuan', 'target_param' => 'requestId', 'detail' => 'Menghapus riwayat pengajuan.'],
         'admin.requests.approve' => ['action' => 'Menyetujui', 'module' => 'Pengajuan', 'target_param' => 'requestId', 'detail' => 'Wali kelas menyetujui pengajuan.'],
@@ -644,6 +646,7 @@ class Control extends Controller
 
         $dashboard = $this->resolveDashboardData($user);
         $filters = [
+            'tab' => $request->query('tab') === 'data' ? 'data' : 'aktivitas',
             'name' => trim((string) $request->query('name', '')),
             'role' => trim((string) $request->query('role', '')),
             'date_start' => trim((string) $request->query('date_start', '')),
@@ -658,6 +661,7 @@ class Control extends Controller
         ];
 
         $logs = null;
+        $dataLogs = null;
         $summary = [
             'total' => 0,
             'today' => 0,
@@ -684,7 +688,40 @@ class Control extends Controller
                 $query->whereDate('created_at', '<=', $filters['date_end']);
             }
 
-            $logs = $query->paginate(12)->withQueryString();
+            $logs = (clone $query)->paginate(12, ['*'], 'aktivitas_page')->withQueryString();
+
+            $dataQuery = DB::table('activity_logs')
+                ->whereNotIn('activity_logs.action', ['Login', 'Logout'])
+                ->orderByDesc('activity_logs.created_at');
+
+            if (Schema::hasTable('data_change_archives')) {
+                $dataQuery->leftJoin('data_change_archives', 'data_change_archives.activity_log_id', '=', 'activity_logs.id')
+                    ->select([
+                    'activity_logs.*',
+                    'data_change_archives.id as archive_id',
+                    'data_change_archives.restored_at as archive_restored_at',
+                ]);
+            } else {
+                $dataQuery->select('activity_logs.*');
+            }
+
+            if ($filters['name'] !== '') {
+                $dataQuery->where('activity_logs.user_name', 'like', '%'.$filters['name'].'%');
+            }
+
+            if ($filters['role'] !== '') {
+                $dataQuery->where('activity_logs.user_level', (int) $filters['role']);
+            }
+
+            if ($filters['date_start'] !== '') {
+                $dataQuery->whereDate('activity_logs.created_at', '>=', $filters['date_start']);
+            }
+
+            if ($filters['date_end'] !== '') {
+                $dataQuery->whereDate('activity_logs.created_at', '<=', $filters['date_end']);
+            }
+
+            $dataLogs = $dataQuery->paginate(12, ['*'], 'data_page')->withQueryString();
 
             $summary = [
                 'total' => DB::table('activity_logs')->count(),
@@ -698,11 +735,114 @@ class Control extends Controller
             'user' => $user,
             'dashboard' => $dashboard,
             'logs' => $logs,
+            'dataLogs' => $dataLogs,
             'filters' => $filters,
             'roles' => $roles,
             'summary' => $summary,
             'activityTableReady' => Schema::hasTable('activity_logs'),
+            'dataArchiveReady' => Schema::hasTable('data_change_archives'),
         ]);
+    }
+
+    public function restoreActivityData(Request $request, int $archiveId): RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+
+        if ((int) ($user['level'] ?? 0) !== 3) {
+            return redirect()->route('activity.logs', ['tab' => 'data'])
+                ->with('error', 'Hanya superadmin yang dapat memulihkan data.');
+        }
+
+        if (! Schema::hasTable('data_change_archives')) {
+            return redirect()->route('activity.logs', ['tab' => 'data'])
+                ->with('error', 'Arsip data belum tersedia. Jalankan migrasi database terlebih dahulu.');
+        }
+
+        $archive = DB::table('data_change_archives')->where('id', $archiveId)->first();
+
+        if (! $archive || ! in_array($archive->action, ['Menghapus', 'Mengubah'], true)) {
+            return redirect()->route('activity.logs', ['tab' => 'data'])
+                ->with('error', 'Arsip data yang ingin dipulihkan tidak ditemukan.');
+        }
+
+        if ($archive->restored_at !== null) {
+            return redirect()->route('activity.logs', ['tab' => 'data'])
+                ->with('error', 'Data ini sudah pernah dipulihkan.');
+        }
+
+        $allowedTables = [
+            'users' => 'id_user',
+            'ruangan' => 'id_ruangan',
+            'inventaris_ruangan' => 'id_inventaris_ruangan',
+            'permintaan' => 'id_permintaan',
+            'hak_akses_menu' => 'snapshot_set',
+        ];
+
+        if (($allowedTables[$archive->table_name] ?? null) !== $archive->primary_key) {
+            return redirect()->route('activity.logs', ['tab' => 'data'])
+                ->with('error', 'Jenis arsip data tidak didukung untuk dipulihkan.');
+        }
+
+        $snapshot = json_decode((string) $archive->snapshot, true);
+        $relatedSnapshot = json_decode((string) $archive->related_snapshot, true) ?: [];
+
+        if (! is_array($snapshot) || $snapshot === []) {
+            return redirect()->route('activity.logs', ['tab' => 'data'])
+                ->with('error', 'Snapshot data tidak valid.');
+        }
+
+        if ($archive->action === 'Menghapus' && $archive->table_name !== 'hak_akses_menu' && DB::table($archive->table_name)->where($archive->primary_key, $archive->record_id)->exists()) {
+            return redirect()->route('activity.logs', ['tab' => 'data'])
+                ->with('error', 'Data tujuan sudah ada, sehingga arsip tidak dipulihkan untuk mencegah duplikasi.');
+        }
+
+        try {
+            DB::transaction(function () use ($archive, $snapshot, $relatedSnapshot, $user) {
+                if ($archive->table_name === 'hak_akses_menu') {
+                    DB::table('hak_akses_menu')->delete();
+
+                    if ($snapshot !== []) {
+                        DB::table('hak_akses_menu')->insert($snapshot);
+                    }
+                } elseif ($archive->action === 'Menghapus') {
+                    DB::table($archive->table_name)->insert($snapshot);
+
+                    if ($archive->table_name === 'permintaan') {
+                        foreach (($relatedSnapshot['detail_permintaan'] ?? []) as $detailRow) {
+                            if (is_array($detailRow)) {
+                                DB::table('detail_permintaan')->insert($detailRow);
+                            }
+                        }
+                    }
+                } else {
+                    $updated = DB::table($archive->table_name)
+                        ->where($archive->primary_key, $archive->record_id)
+                        ->update($snapshot);
+
+                    if ($updated < 1) {
+                        throw new \RuntimeException('Target data is missing.');
+                    }
+                }
+
+                DB::table('data_change_archives')
+                    ->where('id', $archive->id)
+                    ->update([
+                        'restored_at' => now(),
+                        'restored_by' => $user['id_user'] ?? null,
+                        'updated_at' => now(),
+                    ]);
+            });
+        } catch (\Throwable $exception) {
+            return redirect()->route('activity.logs', ['tab' => 'data'])
+                ->with('error', 'Data gagal dipulihkan karena relasi data belum lengkap atau terjadi duplikasi.');
+        }
+
+        return redirect()->route('activity.logs', ['tab' => 'data'])
+            ->with('success', 'Data berhasil dipulihkan.');
     }
 
     public function security(): View|RedirectResponse
@@ -1486,6 +1626,8 @@ class Control extends Controller
             $payload['password'] = Hash::make((string) $request->input('password'));
         }
 
+        $this->archiveChangedRecord('users', 'id_user', $userId, 'Data User', '#'.$userId, $targetUser);
+
         DB::table('users')->where('id_user', $userId)->update($payload);
 
         if ((int) ($sessionUser['id_user'] ?? 0) === $userId) {
@@ -1801,13 +1943,14 @@ class Control extends Controller
         $validator = Validator::make($request->all(), [
             'nama_ruangan' => ['required', 'string', 'max:255'],
             'jenis_ruangan' => ['required', 'string', 'in:kelas,lab,kantor_guru'],
-            'unit' => ['required', 'string', 'max:100'],
+            'unit' => ['required', 'string', 'in:SMP,SMK,KANTOR,LAB,UMUM'],
             'lokasi' => ['required', 'string', 'in:Lantai 1,Lantai 2,Lantai 3,Lantai 4'],
         ], [
             'nama_ruangan.required' => 'Nama ruangan wajib diisi.',
             'jenis_ruangan.required' => 'Jenis ruangan wajib diisi.',
             'jenis_ruangan.in' => 'Jenis ruangan tidak valid.',
-            'unit.required' => 'Kelas wajib diisi.',
+            'unit.required' => 'Kelas wajib dipilih.',
+            'unit.in' => 'Pilihan kelas tidak valid.',
             'lokasi.required' => 'Lantai wajib dipilih.',
             'lokasi.in' => 'Pilihan lantai tidak valid.',
         ]);
@@ -1842,7 +1985,7 @@ class Control extends Controller
             'nama_ruangan' => trim((string) $request->input('nama_ruangan')),
             'kode_ruangan' => $generatedCode,
             'jenis_ruangan' => strtolower(trim((string) $request->input('jenis_ruangan'))),
-            'unit' => trim((string) $request->input('unit')),
+            'unit' => strtoupper(trim((string) $request->input('unit'))),
             'lokasi' => trim((string) $request->input('lokasi')),
             'keterangan' => null,
             'status' => 'aktif',
@@ -1876,13 +2019,14 @@ class Control extends Controller
         $validator = Validator::make($request->all(), [
             'nama_ruangan' => ['required', 'string', 'max:255'],
             'jenis_ruangan' => ['required', 'string', 'in:kelas,lab,kantor_guru'],
-            'unit' => ['required', 'string', 'max:100'],
+            'unit' => ['required', 'string', 'in:SMP,SMK,KANTOR,LAB,UMUM'],
             'lokasi' => ['required', 'string', 'in:Lantai 1,Lantai 2,Lantai 3,Lantai 4'],
         ], [
             'nama_ruangan.required' => 'Nama ruangan wajib diisi.',
             'jenis_ruangan.required' => 'Jenis ruangan wajib diisi.',
             'jenis_ruangan.in' => 'Jenis ruangan tidak valid.',
-            'unit.required' => 'Kelas wajib diisi.',
+            'unit.required' => 'Kelas wajib dipilih.',
+            'unit.in' => 'Pilihan kelas tidak valid.',
             'lokasi.required' => 'Lantai wajib dipilih.',
             'lokasi.in' => 'Pilihan lantai tidak valid.',
         ]);
@@ -1916,13 +2060,15 @@ class Control extends Controller
                 ->with('modal', 'edit-room-'.$roomId);
         }
 
+        $this->archiveChangedRecord('ruangan', 'id_ruangan', $roomId, 'Data Ruangan', '#'.$roomId, $room);
+
         DB::table('ruangan')
             ->where('id_ruangan', $roomId)
             ->update([
                 'nama_ruangan' => trim((string) $request->input('nama_ruangan')),
                 'kode_ruangan' => $generatedCode,
                 'jenis_ruangan' => strtolower(trim((string) $request->input('jenis_ruangan'))),
-                'unit' => trim((string) $request->input('unit')),
+                'unit' => strtoupper(trim((string) $request->input('unit'))),
                 'lokasi' => trim((string) $request->input('lokasi')),
                 'keterangan' => null,
                 'status' => 'aktif',
@@ -1962,6 +2108,8 @@ class Control extends Controller
             ->route('superadmin.rooms', $this->buildSuperadminRoomRedirectFilters($request))
             ->with('error', 'Ruangan tidak bisa dihapus karena masih terhubung ke penugasan, inventaris, atau pengajuan.');
         }
+
+        $this->archiveDeletedRecord('ruangan', 'id_ruangan', $roomId, 'Data Ruangan', '#'.$roomId, $room);
 
         DB::table('ruangan')->where('id_ruangan', $roomId)->delete();
 
@@ -2118,24 +2266,6 @@ class Control extends Controller
         ]);
     }
 
-    public function superadminChatbot(): View|RedirectResponse
-    {
-        if (! session('logged_in')) {
-            return redirect()->route('login');
-        }
-
-        $user = (array) session('user');
-
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
-        }
-
-        return view('superadmin_chatbot', [
-            'user' => $user,
-            'dashboard' => $this->resolveDashboardData($user),
-        ]);
-    }
-
     public function superadminStoreItem(Request $request): RedirectResponse
     {
         if (! session('logged_in')) {
@@ -2151,13 +2281,16 @@ class Control extends Controller
         $validator = Validator::make($request->all(), [
             'nama_barang' => ['required', 'string', 'max:255'],
             'id_kategori_barang' => ['required', 'integer', 'exists:kategori_barang,id_kategori_barang'],
-            'id_ruangan' => ['required', 'integer', 'exists:ruangan,id_ruangan'],
+            'id_ruangan' => ['required', 'array', 'min:1'],
+            'id_ruangan.*' => ['integer', 'distinct', 'exists:ruangan,id_ruangan'],
             'jumlah_baik' => ['required', 'integer', 'min:0'],
             'jumlah_rusak' => ['required', 'integer', 'min:0'],
         ], [
             'nama_barang.required' => 'Nama barang wajib diisi.',
             'id_kategori_barang.required' => 'Kategori wajib dipilih.',
-            'id_ruangan.required' => 'Ruangan wajib dipilih.',
+            'id_ruangan.required' => 'Pilih minimal satu ruangan.',
+            'id_ruangan.array' => 'Pilihan ruangan tidak valid.',
+            'id_ruangan.min' => 'Pilih minimal satu ruangan.',
             'jumlah_baik.required' => 'Jumlah baik wajib diisi.',
             'jumlah_rusak.required' => 'Jumlah rusak wajib diisi.',
         ]);
@@ -2181,42 +2314,159 @@ class Control extends Controller
                 ->with('modal', 'create-item');
         }
 
-        DB::transaction(function () use ($request, $sessionUser, $jumlahBaik, $jumlahRusak) {
+        $roomIds = collect($request->input('id_ruangan', []))
+            ->map(fn ($value) => (int) $value)
+            ->unique()
+            ->values()
+            ->all();
+
+        DB::transaction(function () use ($request, $sessionUser, $jumlahBaik, $jumlahRusak, $roomIds) {
             $itemId = $this->resolveInventoryItemId(
                 trim((string) $request->input('nama_barang')),
                 (int) $request->input('id_kategori_barang')
             );
 
-            $existingInventory = DB::table('inventaris_ruangan')
-                ->where('id_ruangan', (int) $request->input('id_ruangan'))
-                ->where('id_barang', $itemId)
-                ->first();
+            foreach ($roomIds as $roomId) {
+                $existingInventory = DB::table('inventaris_ruangan')
+                    ->where('id_ruangan', $roomId)
+                    ->where('id_barang', $itemId)
+                    ->first();
 
-            if ($existingInventory) {
-                DB::table('inventaris_ruangan')
-                    ->where('id_inventaris_ruangan', $existingInventory->id_inventaris_ruangan)
-                    ->update([
-                        'jumlah_baik' => (int) $existingInventory->jumlah_baik + $jumlahBaik,
-                        'jumlah_rusak' => (int) $existingInventory->jumlah_rusak + $jumlahRusak,
-                        'id_user_pengubah' => (int) ($sessionUser['id_user'] ?? 0),
-                    ]);
+                if ($existingInventory) {
+                    DB::table('inventaris_ruangan')
+                        ->where('id_inventaris_ruangan', $existingInventory->id_inventaris_ruangan)
+                        ->update([
+                            'jumlah_baik' => (int) $existingInventory->jumlah_baik + $jumlahBaik,
+                            'jumlah_rusak' => (int) $existingInventory->jumlah_rusak + $jumlahRusak,
+                            'id_user_pengubah' => (int) ($sessionUser['id_user'] ?? 0),
+                        ]);
 
-                return;
+                    continue;
+                }
+
+                DB::table('inventaris_ruangan')->insert([
+                    'id_ruangan' => $roomId,
+                    'id_barang' => $itemId,
+                    'jumlah_baik' => $jumlahBaik,
+                    'jumlah_rusak' => $jumlahRusak,
+                    'keterangan' => null,
+                    'id_user_pengubah' => (int) ($sessionUser['id_user'] ?? 0),
+                ]);
             }
-
-            DB::table('inventaris_ruangan')->insert([
-                'id_ruangan' => (int) $request->input('id_ruangan'),
-                'id_barang' => $itemId,
-                'jumlah_baik' => $jumlahBaik,
-                'jumlah_rusak' => $jumlahRusak,
-                'keterangan' => null,
-                'id_user_pengubah' => (int) ($sessionUser['id_user'] ?? 0),
-            ]);
         });
 
         return redirect()
             ->route('superadmin.items', $this->buildSuperadminItemRedirectFilters($request))
-            ->with('success', 'Data barang berhasil ditambahkan.');
+            ->with('success', 'Data barang berhasil ditambahkan ke '.count($roomIds).' ruangan.');
+    }
+
+    public function superadminCopyRoomItems(Request $request): RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $sessionUser = (array) session('user');
+
+        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
+            return redirect()->route('dashboard');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'source_room_id' => ['required', 'integer', 'exists:ruangan,id_ruangan'],
+            'target_room_ids' => ['required', 'array', 'min:1'],
+            'target_room_ids.*' => ['integer', 'distinct', 'exists:ruangan,id_ruangan'],
+        ], [
+            'source_room_id.required' => 'Ruangan sumber wajib dipilih.',
+            'target_room_ids.required' => 'Pilih minimal satu ruangan tujuan.',
+            'target_room_ids.min' => 'Pilih minimal satu ruangan tujuan.',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()
+                ->route('superadmin.items', $this->buildSuperadminItemRedirectFilters($request))
+                ->withErrors($validator)
+                ->withInput()
+                ->with('modal', 'copy-items');
+        }
+
+        $sourceRoomId = (int) $request->input('source_room_id');
+        $targetRoomIds = collect($request->input('target_room_ids', []))
+            ->map(fn ($value) => (int) $value)
+            ->reject(fn ($roomId) => $roomId === $sourceRoomId)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($targetRoomIds === []) {
+            return redirect()
+                ->route('superadmin.items', $this->buildSuperadminItemRedirectFilters($request))
+                ->withErrors(['target_room_ids' => 'Ruangan tujuan harus berbeda dari ruangan sumber.'])
+                ->withInput()
+                ->with('modal', 'copy-items');
+        }
+
+        $sourceItems = DB::table('inventaris_ruangan')
+            ->where('id_ruangan', $sourceRoomId)
+            ->get();
+
+        if ($sourceItems->isEmpty()) {
+            return redirect()
+                ->route('superadmin.items', $this->buildSuperadminItemRedirectFilters($request))
+                ->withErrors(['source_room_id' => 'Ruangan sumber belum memiliki data barang untuk disalin.'])
+                ->withInput()
+                ->with('modal', 'copy-items');
+        }
+
+        $inserted = 0;
+        $updated = 0;
+
+        DB::transaction(function () use ($sourceItems, $targetRoomIds, $sessionUser, &$inserted, &$updated) {
+            foreach ($targetRoomIds as $targetRoomId) {
+                foreach ($sourceItems as $sourceItem) {
+                    $existingInventory = DB::table('inventaris_ruangan')
+                        ->where('id_ruangan', $targetRoomId)
+                        ->where('id_barang', $sourceItem->id_barang)
+                        ->first();
+
+                    $payload = [
+                        'jumlah_baik' => (int) $sourceItem->jumlah_baik,
+                        'jumlah_rusak' => (int) $sourceItem->jumlah_rusak,
+                        'keterangan' => $sourceItem->keterangan,
+                        'id_user_pengubah' => (int) ($sessionUser['id_user'] ?? 0),
+                    ];
+
+                    if ($existingInventory) {
+                        $this->archiveChangedRecord(
+                            'inventaris_ruangan',
+                            'id_inventaris_ruangan',
+                            $existingInventory->id_inventaris_ruangan,
+                            'Inventaris',
+                            '#'.$existingInventory->id_inventaris_ruangan,
+                            $existingInventory
+                        );
+
+                        DB::table('inventaris_ruangan')
+                            ->where('id_inventaris_ruangan', $existingInventory->id_inventaris_ruangan)
+                            ->update($payload);
+
+                        $updated++;
+                        continue;
+                    }
+
+                    DB::table('inventaris_ruangan')->insert(array_merge($payload, [
+                        'id_ruangan' => $targetRoomId,
+                        'id_barang' => (int) $sourceItem->id_barang,
+                    ]));
+
+                    $inserted++;
+                }
+            }
+        });
+
+        return redirect()
+            ->route('superadmin.items', $this->buildSuperadminItemRedirectFilters($request))
+            ->with('success', 'Data barang berhasil disalin. '.$inserted.' data ditambahkan dan '.$updated.' data diperbarui.');
     }
 
     public function superadminUpdateItem(Request $request, int $inventoryId): RedirectResponse
@@ -2271,6 +2521,8 @@ class Control extends Controller
                 ->withInput()
                 ->with('modal', 'edit-item-'.$inventoryId);
         }
+
+        $this->archiveChangedRecord('inventaris_ruangan', 'id_inventaris_ruangan', $inventoryId, 'Inventaris', '#'.$inventoryId, $inventoryRow);
 
         DB::transaction(function () use ($request, $sessionUser, $inventoryId, $jumlahBaik, $jumlahRusak) {
             $itemId = $this->resolveInventoryItemId(
@@ -2334,6 +2586,8 @@ class Control extends Controller
                 ->route('superadmin.items', $this->buildSuperadminItemRedirectFilters($request))
                 ->with('error', 'Data barang yang ingin dihapus tidak ditemukan.');
         }
+
+        $this->archiveDeletedRecord('inventaris_ruangan', 'id_inventaris_ruangan', $inventoryId, 'Inventaris', '#'.$inventoryId, $inventoryRow);
 
         DB::table('inventaris_ruangan')->where('id_inventaris_ruangan', $inventoryId)->delete();
 
@@ -3060,6 +3314,17 @@ class Control extends Controller
             return redirect()->route('dashboard');
         }
 
+        if (Schema::hasTable('hak_akses_menu')) {
+            $this->archiveChangedRecord(
+                'hak_akses_menu',
+                'snapshot_set',
+                'all',
+                'Hak Akses',
+                null,
+                DB::table('hak_akses_menu')->orderBy('level')->orderBy('menu_key')->get()->map(fn ($row) => (array) $row)->all()
+            );
+        }
+
         app(MenuAccessService::class)->savePermissions((array) $request->input('permissions', []));
 
         return redirect()
@@ -3143,6 +3408,7 @@ class Control extends Controller
             'reason' => ['required', 'string', 'min:5', 'max:1000'],
             'priority' => ['nullable', 'in:biasa,mendesak'],
             'damage_level' => ['nullable', 'in:ringan,sedang,berat'],
+            'damage_photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp,svg,heic,heif,tif,tiff', 'max:5120'],
         ], [
             'request_type.required' => 'Jenis permintaan wajib dipilih.',
             'request_type.in' => 'Jenis permintaan tidak valid.',
@@ -3150,6 +3416,8 @@ class Control extends Controller
             'quantity.min' => 'Jumlah minimal 1.',
             'reason.required' => 'Alasan atau deskripsi wajib diisi.',
             'reason.min' => 'Alasan atau deskripsi minimal 5 karakter.',
+            'damage_photo.mimes' => 'Foto kerusakan harus berupa file gambar yang didukung.',
+            'damage_photo.max' => 'Ukuran foto kerusakan maksimal 5 MB.',
         ]);
 
         $itemId = $validated['request_type'] === 'barang_baru'
@@ -3181,7 +3449,13 @@ class Control extends Controller
             }
         }
 
-        DB::transaction(function () use ($validated, $assignment, $user, $itemId) {
+        $damagePhotoPath = null;
+
+        if ($validated['request_type'] === 'perbaikan' && $request->hasFile('damage_photo')) {
+            $damagePhotoPath = $request->file('damage_photo')->store('pengajuan-perbaikan', 'public');
+        }
+
+        DB::transaction(function () use ($validated, $assignment, $user, $itemId, $damagePhotoPath) {
             $requestId = DB::table('permintaan')->insertGetId([
                 'kode_permintaan' => $this->generateRequestCode(),
                 'id_ruangan' => (int) $assignment->id_ruangan,
@@ -3199,6 +3473,7 @@ class Control extends Controller
                 'jumlah_disetujui' => 0,
                 'jumlah_diberikan' => 0,
                 'keterangan' => trim((string) ($validated['reason'] ?? '')),
+                'foto_kerusakan' => $damagePhotoPath,
             ]);
         });
 
@@ -3434,6 +3709,7 @@ class Control extends Controller
                     'u.nama as nama_peminta',
                     'dp.jumlah_diminta',
                     'dp.keterangan as detail_keterangan',
+                    'dp.foto_kerusakan',
                     'b.nama_barang',
                 ])
                 ->groupBy('id_permintaan')
@@ -3445,6 +3721,7 @@ class Control extends Controller
                             'nama_barang' => ucfirst((string) $row->nama_barang),
                             'jumlah' => (int) ($row->jumlah_diminta ?? 0),
                             'keterangan' => (string) ($row->detail_keterangan ?? '-'),
+                            'foto_kerusakan' => (string) ($row->foto_kerusakan ?? ''),
                         ])
                         ->values()
                         ->all();
@@ -3464,6 +3741,7 @@ class Control extends Controller
                         'barang_ringkas' => $items !== [] ? implode(', ', array_map(fn ($item) => $item['nama_barang'], $items)) : '-',
                         'jumlah_ringkas' => $items !== [] ? array_sum(array_map(fn ($item) => $item['jumlah'], $items)) : 0,
                         'alasan' => $items[0]['keterangan'] ?? ((string) ($first->catatan_peminta ?? '-')),
+                        'foto_kerusakan' => $items[0]['foto_kerusakan'] ?? '',
                         'can_action' => (string) $first->status_permintaan === 'diajukan',
                         'flow' => [
                             ['label' => 'Ketua Kelas', 'status' => 'done'],
@@ -3990,6 +4268,18 @@ class Control extends Controller
         if (! $ownedRequest) {
             return redirect()->route('requests.history')->with('error', 'Pengajuan tidak ditemukan atau bukan milik akunmu.');
         }
+
+        $relatedSnapshot = [];
+
+        if (Schema::hasTable('detail_permintaan')) {
+            $relatedSnapshot['detail_permintaan'] = DB::table('detail_permintaan')
+                ->where('id_permintaan', $requestId)
+                ->get()
+                ->map(fn ($row) => (array) $row)
+                ->all();
+        }
+
+        $this->archiveDeletedRecord('permintaan', 'id_permintaan', $requestId, 'Pengajuan', '#'.$requestId, $ownedRequest, $relatedSnapshot);
 
         DB::table('permintaan')->where('id_permintaan', $requestId)->delete();
 
@@ -5305,6 +5595,36 @@ class Control extends Controller
         ];
     }
 
+    private function archiveDeletedRecord(string $tableName, string $primaryKey, int|string $recordId, string $module, ?string $target, object|array $snapshot, array $relatedSnapshot = []): void
+    {
+        $this->archiveDataChange($tableName, $primaryKey, $recordId, 'Menghapus', $module, $target, $snapshot, $relatedSnapshot);
+    }
+
+    private function archiveChangedRecord(string $tableName, string $primaryKey, int|string $recordId, string $module, ?string $target, object|array $snapshot, array $relatedSnapshot = []): void
+    {
+        $this->archiveDataChange($tableName, $primaryKey, $recordId, 'Mengubah', $module, $target, $snapshot, $relatedSnapshot);
+    }
+
+    private function archiveDataChange(string $tableName, string $primaryKey, int|string $recordId, string $action, string $module, ?string $target, object|array $snapshot, array $relatedSnapshot = []): void
+    {
+        if (! Schema::hasTable('data_change_archives')) {
+            return;
+        }
+
+        DB::table('data_change_archives')->insert([
+            'table_name' => $tableName,
+            'primary_key' => $primaryKey,
+            'record_id' => (string) $recordId,
+            'action' => $action,
+            'module' => $module,
+            'target' => $target,
+            'snapshot' => json_encode((array) $snapshot),
+            'related_snapshot' => $relatedSnapshot !== [] ? json_encode($relatedSnapshot) : null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
     private function writeActivityLog(Request $request, array $activity, ?User $actor = null): void
     {
         if (! Schema::hasTable('activity_logs')) {
@@ -5318,7 +5638,7 @@ class Control extends Controller
         $target = $this->resolveActivityTarget($request, $activity);
         $roomContext = $this->resolveActivityRoomContext($request);
 
-        DB::table('activity_logs')->insert([
+        $logId = DB::table('activity_logs')->insertGetId([
             'id_user' => $actor?->id_user ?? ($sessionUser['id_user'] ?? null),
             'user_name' => $actorName,
             'user_level' => $actorLevel > 0 ? $actorLevel : null,
@@ -5333,6 +5653,40 @@ class Control extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        $this->attachLatestArchiveToActivityLog($logId, (string) $activity['action'], (string) $activity['module'], $target);
+    }
+
+    private function attachLatestArchiveToActivityLog(int $logId, string $action, string $module, ?string $target): void
+    {
+        if (! Schema::hasTable('data_change_archives') || ! Schema::hasColumn('data_change_archives', 'activity_log_id')) {
+            return;
+        }
+
+        $archiveQuery = DB::table('data_change_archives')
+            ->whereNull('activity_log_id')
+            ->where('action', $action)
+            ->where('module', $module)
+            ->where('created_at', '>=', now()->subMinutes(5));
+
+        if ($target === null || $target === '') {
+            $archiveQuery->whereNull('target');
+        } else {
+            $archiveQuery->where('target', $target);
+        }
+
+        $archive = $archiveQuery->orderByDesc('id')->first();
+
+        if (! $archive) {
+            return;
+        }
+
+        DB::table('data_change_archives')
+            ->where('id', $archive->id)
+            ->update([
+                'activity_log_id' => $logId,
+                'updated_at' => now(),
+            ]);
     }
 
     private function resolveActivityTarget(Request $request, array $activity): ?string

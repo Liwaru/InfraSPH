@@ -31,6 +31,12 @@
         .summary-card { padding: 1rem; }
         .summary-label { color: var(--muted); font-size: 0.8rem; font-weight: 800; margin-bottom: 0.35rem; }
         .summary-value { color: #111827; font-size: 1.45rem; font-weight: 800; }
+        .view-tabs { display: inline-flex; gap: 0.4rem; background: #fff; border: 1px solid var(--border); border-radius: 18px; padding: 0.35rem; box-shadow: 0 18px 38px -30px rgba(31, 41, 55, 0.28); }
+        .view-tab { display: inline-flex; align-items: center; gap: 0.45rem; border-radius: 13px; padding: 0.72rem 1rem; color: #9a3412; text-decoration: none; font-weight: 800; font-size: 0.9rem; }
+        .view-tab.active { background: linear-gradient(100deg, #f97316, #fd7010); color: #fff; }
+        .alert { border-radius: 16px; padding: 0.85rem 1rem; font-weight: 800; line-height: 1.5; }
+        .alert.success { background: #ecfdf3; border: 1px solid #bbf7d0; color: #166534; }
+        .alert.error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
         .filter-card { padding: 1rem; }
         .filter-form { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(150px, 0.9fr) repeat(2, minmax(145px, 0.85fr)) auto auto; gap: 0.8rem; align-items: end; }
         label { display: block; color: #334155; font-size: 0.78rem; font-weight: 800; margin-bottom: 0.45rem; }
@@ -58,8 +64,12 @@
         .badge.action-update, .badge.action-realize { background: #dbeafe; color: #1d4ed8; }
         .badge.action-delete, .badge.action-reject, .badge.action-logout { background: #fee2e2; color: #b91c1c; }
         .empty-state { padding: 2.2rem 1.2rem; text-align: center; color: var(--muted); font-weight: 700; line-height: 1.6; }
-        .pagination-wrap { padding: 1rem; }
-        .pagination-wrap nav { display: flex; justify-content: flex-end; }
+        .pagination-wrap { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; color: var(--muted); font-size: 0.84rem; font-weight: 700; }
+        .pagination-links { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+        .page-link, .page-current, .page-disabled { min-width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 11px; padding: 0 0.65rem; font-weight: 800; text-decoration: none; }
+        .page-link { border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412; }
+        .page-current { background: var(--brand-orange); color: #fff; }
+        .page-disabled { border: 1px solid #f2e7df; color: #cbd5e1; background: #f8fafc; }
         .row-actions { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
         .detail-btn, .restore-btn { display: inline-flex; align-items: center; gap: 0.35rem; border: 1px solid #fed7aa; border-radius: 999px; background: #fff7ed; color: #9a3412; padding: 0.42rem 0.62rem; font: inherit; font-size: 0.76rem; font-weight: 800; cursor: pointer; }
         .restore-btn { background: #ecfdf3; border-color: #bbf7d0; color: #166534; }
@@ -98,8 +108,28 @@
                 <div class="summary-card"><div class="summary-label">Perubahan Data</div><div class="summary-value">{{ number_format($summary['data_changes']) }}</div></div>
             </section>
 
+            <nav class="view-tabs" aria-label="Pilihan catatan">
+                <a href="{{ route('activity.logs', array_merge(request()->except(['aktivitas_page', 'data_page']), ['tab' => 'aktivitas'])) }}" @class(['view-tab', 'active' => $filters['tab'] === 'aktivitas'])>
+                    <i class="bi bi-activity"></i>
+                    Aktivitas
+                </a>
+                <a href="{{ route('activity.logs', array_merge(request()->except(['aktivitas_page', 'data_page']), ['tab' => 'data'])) }}" @class(['view-tab', 'active' => $filters['tab'] === 'data'])>
+                    <i class="bi bi-database"></i>
+                    Data
+                </a>
+            </nav>
+
+            @if (session('success'))
+                <div class="alert success">{{ session('success') }}</div>
+            @endif
+
+            @if (session('error'))
+                <div class="alert error">{{ session('error') }}</div>
+            @endif
+
             <section class="filter-card">
                 <form method="GET" action="{{ route('activity.logs') }}" class="filter-form">
+                    <input type="hidden" name="tab" value="{{ $filters['tab'] }}">
                     <div>
                         <label for="name">Nama User</label>
                         <input id="name" type="text" name="name" value="{{ $filters['name'] }}" placeholder="Cari nama user">
@@ -122,23 +152,23 @@
                         <input id="date_end" type="date" name="date_end" value="{{ $filters['date_end'] }}">
                     </div>
                     <button type="submit" class="btn"><i class="bi bi-search"></i> Cari</button>
-                    <a href="{{ route('activity.logs') }}" class="btn secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
+                    <a href="{{ route('activity.logs', ['tab' => $filters['tab']]) }}" class="btn secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
                 </form>
             </section>
 
             <section class="table-card">
                 <div class="table-head">
                     <div>
-                        <div class="table-title">Daftar Aktivitas</div>
-                        <div class="table-subtitle">Aktivitas terbaru tampil paling atas.</div>
+                        <div class="table-title">{{ $filters['tab'] === 'data' ? 'Daftar Data CRUD' : 'Daftar Aktivitas' }}</div>
+                        <div class="table-subtitle">{{ $filters['tab'] === 'data' ? 'Data yang dibuat, diubah, dihapus, atau diproses tampil paling atas.' : 'Aktivitas terbaru tampil paling atas.' }}</div>
                     </div>
                 </div>
 
                 @if (! $activityTableReady)
                     <div class="empty-state">Tabel activity_logs belum tersedia. Jalankan migrasi database agar catatan aktivitas bisa mulai tersimpan.</div>
-                @elseif ($logs->isEmpty())
+                @elseif ($filters['tab'] === 'aktivitas' && $logs->isEmpty())
                     <div class="empty-state">Belum ada aktivitas yang cocok dengan filter saat ini.</div>
-                @else
+                @elseif ($filters['tab'] === 'aktivitas')
                     <div class="table-scroll">
                         <table>
                             <thead>
@@ -165,6 +195,7 @@
                                             'Menyetujui' => 'action-approve',
                                             'Menolak' => 'action-reject',
                                             'Merealisasikan' => 'action-realize',
+                                            'Memulihkan' => 'action-realize',
                                             'Login' => 'action-login',
                                             'Logout' => 'action-logout',
                                             default => 'action-update',
@@ -200,12 +231,6 @@
                                                     <i class="bi bi-eye"></i>
                                                     Detail
                                                 </button>
-                                                @if ((int) ($log->user_level ?? 0) === 3 && $log->action === 'Menghapus')
-                                                    <button type="button" class="restore-btn" disabled title="Pemulihan membutuhkan arsip data terhapus.">
-                                                        <i class="bi bi-arrow-counterclockwise"></i>
-                                                        Pulihkan
-                                                    </button>
-                                                @endif
                                             </div>
                                         </td>
                                     </tr>
@@ -213,7 +238,125 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="pagination-wrap">{{ $logs->links() }}</div>
+                    <div class="pagination-wrap">
+                        <div>Menampilkan {{ $logs->firstItem() }} sampai {{ $logs->lastItem() }} dari {{ $logs->total() }} aktivitas</div>
+                        <div class="pagination-links">
+                            @if ($logs->onFirstPage())
+                                <span class="page-disabled">Prev</span>
+                            @else
+                                <a class="page-link" href="{{ $logs->previousPageUrl() }}">Prev</a>
+                            @endif
+                            @for ($page = 1; $page <= $logs->lastPage(); $page++)
+                                @if ($page === $logs->currentPage())
+                                    <span class="page-current">{{ $page }}</span>
+                                @else
+                                    <a class="page-link" href="{{ $logs->url($page) }}">{{ $page }}</a>
+                                @endif
+                            @endfor
+                            @if ($logs->hasMorePages())
+                                <a class="page-link" href="{{ $logs->nextPageUrl() }}">Next</a>
+                            @else
+                                <span class="page-disabled">Next</span>
+                            @endif
+                        </div>
+                    </div>
+                @elseif ($dataLogs->isEmpty())
+                    <div class="empty-state">Belum ada data CRUD yang cocok dengan filter saat ini.</div>
+                @else
+                    <div class="table-scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Tanggal & Waktu</th>
+                                    <th>Nama User</th>
+                                    <th>Role</th>
+                                    <th>Aksi CRUD</th>
+                                    <th>Modul</th>
+                                    <th>Target / Data</th>
+                                    <th>Detail Data</th>
+                                    <th>Kelas / Ruangan</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($dataLogs as $log)
+                                    @php
+                                        $actionClass = match ($log->action) {
+                                            'Menambah' => 'action-create',
+                                            'Mengubah' => 'action-update',
+                                            'Menghapus' => 'action-delete',
+                                            'Menyetujui' => 'action-approve',
+                                            'Menolak' => 'action-reject',
+                                            'Merealisasikan', 'Memulihkan' => 'action-realize',
+                                            default => 'action-update',
+                                        };
+                                        $canRestore = $dataArchiveReady
+                                            && in_array($log->action, ['Menghapus', 'Mengubah'], true)
+                                            && ! empty($log->archive_id)
+                                            && empty($log->archive_restored_at)
+                                            && (int) ($user['level'] ?? 0) === 3;
+                                    @endphp
+                                    <tr>
+                                        <td>{{ $dataLogs->firstItem() + $loop->index }}</td>
+                                        <td>
+                                            <div class="cell-strong">{{ \Carbon\Carbon::parse($log->created_at)->format('d M Y') }}</div>
+                                            <div class="cell-muted">{{ \Carbon\Carbon::parse($log->created_at)->format('H:i') }}</div>
+                                        </td>
+                                        <td class="cell-strong">{{ $log->user_name ?? '-' }}</td>
+                                        <td><span class="badge role-{{ $log->user_level ?? 0 }}">{{ $log->role_name ?? '-' }}</span></td>
+                                        <td><span class="badge {{ $actionClass }}">{{ $log->action }}</span></td>
+                                        <td>{{ $log->module }}</td>
+                                        <td>{{ $log->target ?? '-' }}</td>
+                                        <td>{{ $log->detail ?? '-' }}</td>
+                                        <td>{{ $log->room_context ?? '-' }}</td>
+                                        <td>
+                                            @if ($canRestore)
+                                                <form method="POST" action="{{ route('activity.data.restore', $log->archive_id) }}" onsubmit="return confirm('Pulihkan data ini?');">
+                                                    @csrf
+                                                    <button type="submit" class="restore-btn">
+                                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                                        Pulihkan
+                                                    </button>
+                                                </form>
+                                            @elseif (in_array($log->action, ['Menghapus', 'Mengubah'], true) && ! empty($log->archive_restored_at))
+                                                <span class="badge action-realize">Sudah dipulihkan</span>
+                                            @elseif (in_array($log->action, ['Menghapus', 'Mengubah'], true))
+                                                <button type="button" class="restore-btn" disabled title="Arsip tersedia hanya untuk perubahan setelah fitur ini aktif.">
+                                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                                    Pulihkan
+                                                </button>
+                                            @else
+                                                -
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-wrap">
+                        <div>Menampilkan {{ $dataLogs->firstItem() }} sampai {{ $dataLogs->lastItem() }} dari {{ $dataLogs->total() }} data</div>
+                        <div class="pagination-links">
+                            @if ($dataLogs->onFirstPage())
+                                <span class="page-disabled">Prev</span>
+                            @else
+                                <a class="page-link" href="{{ $dataLogs->previousPageUrl() }}">Prev</a>
+                            @endif
+                            @for ($page = 1; $page <= $dataLogs->lastPage(); $page++)
+                                @if ($page === $dataLogs->currentPage())
+                                    <span class="page-current">{{ $page }}</span>
+                                @else
+                                    <a class="page-link" href="{{ $dataLogs->url($page) }}">{{ $page }}</a>
+                                @endif
+                            @endfor
+                            @if ($dataLogs->hasMorePages())
+                                <a class="page-link" href="{{ $dataLogs->nextPageUrl() }}">Next</a>
+                            @else
+                                <span class="page-disabled">Next</span>
+                            @endif
+                        </div>
+                    </div>
                 @endif
             </section>
         </div>

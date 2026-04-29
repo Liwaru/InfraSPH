@@ -776,7 +776,17 @@
                         </div>
                         <div class="field-group">
                             <label for="createRoomUnit">Kelas</label>
-                            <input id="createRoomUnit" type="text" name="unit" value="{{ session('modal') === 'create-room' ? old('unit') : '' }}" placeholder="Contoh: XIA" required>
+                            @php
+                                $selectedCreateUnit = session('modal') === 'create-room' ? old('unit') : '';
+                            @endphp
+                            <select id="createRoomUnit" name="unit" required>
+                                <option value="">Pilih kelas</option>
+                                <option value="SMP" @selected($selectedCreateUnit === 'SMP')>SMP</option>
+                                <option value="SMK" @selected($selectedCreateUnit === 'SMK')>SMK</option>
+                                <option value="KANTOR" @selected($selectedCreateUnit === 'KANTOR')>Kantor</option>
+                                <option value="LAB" @selected($selectedCreateUnit === 'LAB')>Lab</option>
+                                <option value="UMUM" @selected($selectedCreateUnit === 'UMUM')>Umum</option>
+                            </select>
                         </div>
                         <div class="field-group">
                             <label for="createRoomLocation">Lantai</label>
@@ -847,7 +857,16 @@
                         </div>
                         <div class="field-group">
                             <label for="editRoomUnit{{ $room['id_ruangan'] }}">Kelas</label>
-                            <input id="editRoomUnit{{ $room['id_ruangan'] }}" type="text" name="unit" value="{{ $isEditModalOpen ? old('unit', $room['unit']) : $room['unit'] }}" required>
+                            @php
+                                $selectedUnit = strtoupper((string) ($isEditModalOpen ? old('unit', $room['unit']) : $room['unit']));
+                            @endphp
+                            <select id="editRoomUnit{{ $room['id_ruangan'] }}" name="unit" required>
+                                <option value="SMP" @selected($selectedUnit === 'SMP')>SMP</option>
+                                <option value="SMK" @selected($selectedUnit === 'SMK')>SMK</option>
+                                <option value="KANTOR" @selected($selectedUnit === 'KANTOR')>Kantor</option>
+                                <option value="LAB" @selected($selectedUnit === 'LAB')>Lab</option>
+                                <option value="UMUM" @selected($selectedUnit === 'UMUM')>Umum</option>
+                            </select>
                         </div>
                         <div class="field-group">
                             <label for="editRoomLocation{{ $room['id_ruangan'] }}">Lantai</label>

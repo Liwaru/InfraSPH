@@ -133,6 +133,7 @@
             color: #ffffff;
         }
 
+        .action-btn:not(.primary),
         .filter-link,
         .ghost-btn,
         .row-action {
@@ -228,6 +229,85 @@
             color: #172033;
             background: #fffdfa;
             outline: none;
+        }
+
+        .room-checklist {
+            max-height: 260px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.65rem;
+            padding: 0.85rem;
+            border: 1px solid #ecd8cb;
+            border-radius: 18px;
+            background: linear-gradient(180deg, #fffefd, #fff8f4);
+            scrollbar-color: #f97316 #fff2ea;
+            scrollbar-width: thin;
+        }
+
+        .room-checklist::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .room-checklist::-webkit-scrollbar-track {
+            background: #fff2ea;
+            border-radius: 999px;
+        }
+
+        .room-checklist::-webkit-scrollbar-thumb {
+            background: #f97316;
+            border-radius: 999px;
+        }
+
+        .room-check {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.62rem;
+            min-height: 58px;
+            padding: 0.72rem 0.78rem;
+            border: 1px solid #f3e3db;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.78);
+            color: #263241;
+            font-size: 0.82rem;
+            font-weight: 800;
+            line-height: 1.35;
+            cursor: pointer;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, transform 0.18s ease;
+        }
+
+        .room-check:hover {
+            transform: translateY(-1px);
+            border-color: rgba(255, 89, 0, 0.32);
+            box-shadow: 0 14px 26px -24px rgba(225, 79, 0, 0.7);
+        }
+
+        .room-check:has(input:checked) {
+            border-color: rgba(255, 89, 0, 0.45);
+            background: #fff3eb;
+            box-shadow: inset 0 0 0 1px rgba(255, 89, 0, 0.08);
+        }
+
+        .room-check input {
+            width: 16px;
+            height: 16px;
+            margin-top: 0.15rem;
+            accent-color: var(--brand-orange);
+            flex-shrink: 0;
+        }
+
+        .room-check-meta {
+            display: block;
+            color: #8b96a6;
+            font-size: 0.76rem;
+            font-weight: 700;
+            margin-top: 0.1rem;
+        }
+
+        .room-check-name {
+            display: block;
+            overflow-wrap: anywhere;
         }
 
         .feedback-stack {
@@ -436,10 +516,10 @@
         }
 
         .modal-dialog {
-            width: min(780px, 100%);
+            width: min(860px, 100%);
             max-height: calc(100vh - 2.4rem);
             overflow-y: auto;
-            padding: 1.2rem 1.2rem 1.15rem;
+            padding: 1.25rem 1.25rem 1.15rem;
         }
 
         .modal-header {
@@ -485,6 +565,16 @@
             gap: 0.9rem;
         }
 
+        .field-grid.is-room-picker {
+            grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
+            align-items: start;
+        }
+
+        .stacked-fields {
+            display: grid;
+            gap: 0.9rem;
+        }
+
         .detail-card {
             padding: 0.95rem 1rem;
             border: 1px solid #f1dfd4;
@@ -522,6 +612,7 @@
             .summary-grid,
             .filter-form,
             .field-grid,
+            .field-grid.is-room-picker,
             .detail-grid {
                 grid-template-columns: 1fr;
                 flex-direction: column;
@@ -656,6 +747,10 @@
                             <div class="table-subtitle">Menampilkan {{ number_format($items->total()) }} data barang dari seluruh ruangan berdasarkan filter aktif.</div>
                         </div>
                         <div class="table-header-actions">
+                            <button type="button" class="action-btn js-open-modal" data-modal="copy-items">
+                                <i class="bi bi-copy"></i>
+                                <span>Salin Barang</span>
+                            </button>
                             <button type="button" class="action-btn primary js-open-modal" data-modal="create-item">
                                 <i class="bi bi-plus-square"></i>
                                 <span>Tambah Barang</span>
@@ -817,30 +912,34 @@
                     </div>
                 </div>
 
-                <div class="field-grid">
+                <div class="field-grid is-room-picker">
                     <div class="field-group">
-                        <label for="createItemRoom">Ruangan</label>
-                        <select id="createItemRoom" name="id_ruangan" required>
-                            <option value="">Pilih ruangan</option>
+                        <label>Ruangan Tujuan</label>
+                        <div class="room-checklist">
                             @foreach ($roomOptions as $option)
-                                <option value="{{ $option->id_ruangan }}" @selected((string) old('id_ruangan') === (string) $option->id_ruangan)>{{ $option->nama_ruangan }} ({{ $option->jenis_ruangan === 'kantor_guru' ? 'Kantor Guru' : ucfirst($option->jenis_ruangan) }})</option>
+                                <label class="room-check">
+                                    <input type="checkbox" name="id_ruangan[]" value="{{ $option->id_ruangan }}" @checked(in_array((string) $option->id_ruangan, (array) old('id_ruangan', []), true))>
+                                    <span>
+                                        <span class="room-check-name">{{ $option->nama_ruangan }}</span>
+                                        <span class="room-check-meta">{{ $option->jenis_ruangan === 'kantor_guru' ? 'Kantor Guru' : ucfirst($option->jenis_ruangan) }}</span>
+                                    </span>
+                                </label>
                             @endforeach
-                        </select>
+                        </div>
                     </div>
-                    <div class="field-group">
-                        <label for="createItemGood">Jumlah Baik</label>
-                        <input id="createItemGood" type="number" min="0" name="jumlah_baik" value="{{ old('jumlah_baik', 0) }}" required>
-                    </div>
-                </div>
-
-                <div class="field-grid">
-                    <div class="field-group">
-                        <label for="createItemDamaged">Jumlah Rusak</label>
-                        <input id="createItemDamaged" type="number" min="0" name="jumlah_rusak" value="{{ old('jumlah_rusak', 0) }}" required>
-                    </div>
-                    <div class="field-group">
-                        <label>Catatan</label>
-                        <input type="text" value="Tanggal masuk belum tersedia di database inventaris." disabled>
+                    <div class="stacked-fields">
+                        <div class="field-group">
+                            <label for="createItemGood">Jumlah Baik</label>
+                            <input id="createItemGood" type="number" min="0" name="jumlah_baik" value="{{ old('jumlah_baik', 0) }}" required>
+                        </div>
+                        <div class="field-group">
+                            <label for="createItemDamaged">Jumlah Rusak</label>
+                            <input id="createItemDamaged" type="number" min="0" name="jumlah_rusak" value="{{ old('jumlah_rusak', 0) }}" required>
+                        </div>
+                        <div class="field-group">
+                            <label>Catatan</label>
+                            <input type="text" value="Tanggal masuk belum tersedia di database inventaris." disabled>
+                        </div>
                     </div>
                 </div>
 
@@ -849,6 +948,63 @@
                     <button type="submit" class="submit-btn">
                         <i class="bi bi-check-circle"></i>
                         <span>Simpan Barang</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-shell" id="modal-copy-items" aria-hidden="true">
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modalCopyItemsTitle">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title" id="modalCopyItemsTitle">Salin Barang Antar Ruangan</div>
+                    <div class="modal-subtitle">Pilih satu ruangan sumber, lalu centang ruangan tujuan. Barang yang sudah ada di tujuan akan disamakan jumlahnya dengan sumber.</div>
+                </div>
+                <button type="button" class="modal-close js-close-modal" aria-label="Tutup modal">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <form method="POST" action="{{ route('superadmin.items.copy') }}" class="modal-form">
+                @csrf
+                <input type="hidden" name="q" value="{{ $filters['q'] }}">
+                <input type="hidden" name="category_filter" value="{{ $filters['category'] }}">
+                <input type="hidden" name="room_filter" value="{{ $filters['room'] }}">
+                <input type="hidden" name="room_type_filter" value="{{ $filters['room_type'] }}">
+                <input type="hidden" name="condition_filter" value="{{ $filters['condition'] }}">
+
+                <div class="field-grid is-room-picker">
+                    <div class="field-group">
+                        <label>Ruangan Tujuan</label>
+                        <div class="room-checklist">
+                            @foreach ($roomOptions as $option)
+                                <label class="room-check">
+                                    <input type="checkbox" name="target_room_ids[]" value="{{ $option->id_ruangan }}" @checked(in_array((string) $option->id_ruangan, (array) old('target_room_ids', []), true))>
+                                    <span>
+                                        <span class="room-check-name">{{ $option->nama_ruangan }}</span>
+                                        <span class="room-check-meta">{{ $option->jenis_ruangan === 'kantor_guru' ? 'Kantor Guru' : ucfirst($option->jenis_ruangan) }}</span>
+                                    </span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label for="copySourceRoom">Ruangan Sumber</label>
+                        <select id="copySourceRoom" name="source_room_id" required>
+                            <option value="">Pilih ruangan sumber</option>
+                            @foreach ($roomOptions as $option)
+                                <option value="{{ $option->id_ruangan }}" @selected((string) old('source_room_id') === (string) $option->id_ruangan)>{{ $option->nama_ruangan }} ({{ $option->jenis_ruangan === 'kantor_guru' ? 'Kantor Guru' : ucfirst($option->jenis_ruangan) }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="ghost-btn js-close-modal">Batal</button>
+                    <button type="submit" class="submit-btn">
+                        <i class="bi bi-copy"></i>
+                        <span>Salin Barang</span>
                     </button>
                 </div>
             </form>

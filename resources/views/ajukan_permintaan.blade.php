@@ -270,6 +270,10 @@
             resize: vertical;
         }
 
+        .field input[type="file"] {
+            padding: 0.78rem 0.9rem;
+        }
+
         .field-help {
             font-size: 0.82rem;
             color: #7b8794;
@@ -464,7 +468,7 @@
                         </article>
                     </div>
 
-                    <form method="POST" action="{{ route('requests.store') }}" class="form-grid">
+                    <form method="POST" action="{{ route('requests.store') }}" class="form-grid" enctype="multipart/form-data">
                         @csrf
                         <input type="hidden" name="request_type" id="requestTypeInput" value="{{ old('request_type', 'barang_baru') }}">
 
@@ -566,6 +570,15 @@
                                         <div class="field-error">{{ $message }}</div>
                                     @enderror
                                 </div>
+
+                                <div class="field">
+                                    <label for="damage_photo">Foto Kerusakan</label>
+                                    <input type="file" name="damage_photo" id="damage_photo" accept="image/*,.heic,.heif,.tif,.tiff">
+                                    <div class="field-help">Unggah foto barang rusak. Format gambar umum didukung, maksimal 5 MB.</div>
+                                    @error('damage_photo')
+                                        <div class="field-error">{{ $message }}</div>
+                                    @enderror
+                                </div>
                             </div>
 
                             <div class="button-row">
@@ -599,6 +612,10 @@
                                     <div class="preview-label">Keterangan</div>
                                     <div class="preview-value" id="previewReason">{{ old('reason') ?: 'Isi alasan atau deskripsi agar ringkasan tampil di sini.' }}</div>
                                 </div>
+                                <div class="preview-item" id="previewPhotoWrap" style="display: none;">
+                                    <div class="preview-label">Foto</div>
+                                    <div class="preview-value" id="previewPhoto">Belum dipilih</div>
+                                </div>
                             </div>
 
                         </aside>
@@ -621,10 +638,13 @@
             const repairQuantityInput = document.getElementById('repair_quantity');
             const reasonInput = document.getElementById('reason');
             const repairReasonInput = document.getElementById('repair_reason');
+            const damagePhotoInput = document.getElementById('damage_photo');
             const previewType = document.getElementById('previewType');
             const previewItem = document.getElementById('previewItem');
             const previewQuantity = document.getElementById('previewQuantity');
             const previewReason = document.getElementById('previewReason');
+            const previewPhotoWrap = document.getElementById('previewPhotoWrap');
+            const previewPhoto = document.getElementById('previewPhoto');
             const cancelButton = document.querySelector('.btn-cancel-request');
 
             function activeType() {
@@ -673,13 +693,18 @@
                     : selectedOptionText(repairItemSelect);
                 previewQuantity.textContent = quantityValue;
                 previewReason.textContent = reasonValue;
+
+                if (previewPhotoWrap && previewPhoto) {
+                    previewPhotoWrap.style.display = type === 'perbaikan' ? '' : 'none';
+                    previewPhoto.textContent = damagePhotoInput?.files?.[0]?.name || 'Belum dipilih';
+                }
             }
 
             typeInputs.forEach(function (input) {
                 input.addEventListener('change', updateSections);
             });
 
-            [newItemSelect, repairItemSelect, quantityInput, repairQuantityInput, reasonInput, repairReasonInput].forEach(function (element) {
+            [newItemSelect, repairItemSelect, quantityInput, repairQuantityInput, reasonInput, repairReasonInput, damagePhotoInput].forEach(function (element) {
                 if (!element) {
                     return;
                 }

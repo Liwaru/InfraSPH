@@ -11,6 +11,7 @@ Route::get('/keamanan', [Control::class, 'security'])->name('security.show');
 Route::get('/ubah-password', [Control::class, 'changePassword'])->name('profile.password.edit');
 Route::get('/profil-keamanan', [Control::class, 'profileSecurity'])->name('profile.security');
 Route::get('/catatan-aktivitas', [Control::class, 'activityLogs'])->name('activity.logs');
+Route::post('/catatan-aktivitas/data/{archiveId}/pulihkan', [Control::class, 'restoreActivityData'])->name('activity.data.restore');
 Route::post('/profil-keamanan/profil', [Control::class, 'updateProfileIdentity'])->name('profile.identity.update');
 Route::post('/profil-keamanan/password', [Control::class, 'updateProfilePassword'])->name('profile.password.update');
 Route::post('/profil-keamanan/otp', [Control::class, 'updateProfileOtp'])->name('profile.otp.update');
@@ -41,9 +42,9 @@ Route::post('/superadmin/data-ruangan/{roomId}/update', [Control::class, 'supera
 Route::post('/superadmin/data-ruangan/{roomId}/delete', [Control::class, 'superadminDeleteRoom'])->name('superadmin.rooms.delete');
 Route::get('/superadmin/data-barang', [Control::class, 'superadminItems'])->name('superadmin.items');
 Route::post('/superadmin/data-barang', [Control::class, 'superadminStoreItem'])->name('superadmin.items.store');
+Route::post('/superadmin/data-barang/salin', [Control::class, 'superadminCopyRoomItems'])->name('superadmin.items.copy');
 Route::post('/superadmin/data-barang/{inventoryId}/update', [Control::class, 'superadminUpdateItem'])->name('superadmin.items.update');
 Route::post('/superadmin/data-barang/{inventoryId}/delete', [Control::class, 'superadminDeleteItem'])->name('superadmin.items.delete');
-Route::get('/superadmin/chatbot', [Control::class, 'superadminChatbot'])->name('superadmin.chatbot');
 Route::get('/superadmin/tindak-lanjut-pengajuan', [Control::class, 'superadminRequestRealizations'])->name('superadmin.requests.realization');
 Route::post('/superadmin/tindak-lanjut-pengajuan/{requestId}/realize', [Control::class, 'superadminRealizeRequest'])->name('superadmin.requests.realization.store');
 Route::get('/superadmin/laporan', [Control::class, 'superadminReports'])->name('superadmin.reports');
