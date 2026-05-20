@@ -342,6 +342,7 @@
                     modal.classList.remove('is-open');
                     modal.setAttribute('aria-hidden', 'true');
                 });
+                window.InfraSPHScrollLock?.unlock();
                 document.body.style.overflow = '';
             }
 
@@ -354,6 +355,7 @@
                 closeAllModals();
                 target.classList.add('is-open');
                 target.setAttribute('aria-hidden', 'false');
+                window.InfraSPHScrollLock?.lock();
                 document.body.style.overflow = 'hidden';
             }
 

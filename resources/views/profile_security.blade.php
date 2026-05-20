@@ -141,7 +141,7 @@
                     </form>
 
                     <div class="form-actions">
-                        <a href="{{ route('login.google.redirect') }}" class="btn secondary"><i class="bi bi-google"></i> Hubungkan Login Google</a>
+                        <a href="{{ route('login.google.link') }}" class="btn secondary"><i class="bi bi-google"></i> Hubungkan Login Google</a>
                     </div>
                 </div>
             </section>

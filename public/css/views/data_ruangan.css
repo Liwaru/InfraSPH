@@ -522,5 +522,27 @@
             table.mobile-card-table td::before { content:attr(data-label); flex:0 0 40%; color:#7b8794; font-size:.74rem; font-weight:800; text-transform:uppercase; text-align:left; }
             table.mobile-card-table td > *:not(form) { max-width:58%; min-width:0; }
             table.mobile-card-table .action-group { justify-content:flex-end; }
-            table.mobile-card-table td[data-label="Kondisi"] .condition-copy { overflow-wrap:anywhere; text-align:right; }
+            table.mobile-card-table td[data-label="Kondisi"] {
+                display:grid;
+                grid-template-columns:minmax(5.6rem, 36%) minmax(0, 1fr);
+                column-gap:.75rem;
+                row-gap:.32rem;
+                justify-content:initial;
+            }
+            table.mobile-card-table td[data-label="Kondisi"]::before {
+                grid-column:1;
+                grid-row:1 / span 2;
+            }
+            table.mobile-card-table td[data-label="Kondisi"] > * {
+                grid-column:2;
+                justify-self:end;
+                max-width:100%;
+            }
+            table.mobile-card-table td[data-label="Kondisi"] .condition-copy {
+                margin-top:0;
+                overflow-wrap:break-word;
+                word-break:normal;
+                text-align:right;
+                white-space:normal;
+            }
         }

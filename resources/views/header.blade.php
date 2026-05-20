@@ -191,6 +191,9 @@
             }
             function openMobileSidebar() {
                 if (!appShell || !mobileToggleButton) { return; }
+                appShell.classList.remove('chatbot-open');
+                document.getElementById('chatbotShell')?.classList.remove('open');
+                document.getElementById('chatbotToggle')?.setAttribute('aria-expanded', 'false');
                 appShell.classList.add('sidebar-mobile-open');
                 mobileToggleButton.setAttribute('aria-expanded', 'true');
                 document.body.style.overflow = 'hidden';
@@ -213,6 +216,45 @@
                 closeAccountMenu();
             });
         }
+
+        window.InfraSPHScrollLock = window.InfraSPHScrollLock || (function () {
+            let locked = false;
+            let scrollY = 0;
+
+            function lock() {
+                if (locked) {
+                    return;
+                }
+
+                scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+                document.documentElement.style.overflow = 'hidden';
+                document.body.style.position = 'fixed';
+                document.body.style.top = '-' + scrollY + 'px';
+                document.body.style.left = '0';
+                document.body.style.right = '0';
+                document.body.style.width = '100%';
+                document.body.style.overflow = 'hidden';
+                locked = true;
+            }
+
+            function unlock() {
+                if (!locked) {
+                    return;
+                }
+
+                document.documentElement.style.overflow = '';
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.left = '';
+                document.body.style.right = '';
+                document.body.style.width = '';
+                document.body.style.overflow = '';
+                window.scrollTo(0, scrollY);
+                locked = false;
+            }
+
+            return { lock, unlock };
+        })();
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function () {

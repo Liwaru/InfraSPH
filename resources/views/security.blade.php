@@ -52,7 +52,7 @@
                 </label>
                 <div class="actions">
                     <button type="submit" class="btn">Simpan Keamanan</button>
-                    <a href="{{ route('login.google.redirect') }}" class="btn google">
+                    <a href="{{ route('login.google.link') }}" class="btn google">
                         <i class="bi bi-google"></i>
                         Hubungkan Login Google
                     </a>

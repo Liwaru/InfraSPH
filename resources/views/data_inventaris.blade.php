@@ -283,7 +283,7 @@
                     <div class="field-group">
                         <label for="createItemCategory">Kategori</label>
                         <select id="createItemCategory" name="id_kategori_barang" required>
-                            <option value="">Pilih kategori</option>
+                            <option value="" disabled @selected(old('id_kategori_barang') === null || old('id_kategori_barang') === '')>Pilih kategori</option>
                             @foreach ($categoryOptions as $option)
                                 <option value="{{ $option->id_kategori_barang }}" @selected((string) old('id_kategori_barang') === (string) $option->id_kategori_barang)>{{ ucfirst($option->nama_kategori) }}</option>
                             @endforeach
@@ -371,7 +371,7 @@
                     <div class="field-group">
                         <label for="copySourceRoom">Ruangan Sumber</label>
                         <select id="copySourceRoom" name="source_room_id" required>
-                            <option value="">Pilih ruangan sumber</option>
+                            <option value="" disabled @selected(old('source_room_id') === null || old('source_room_id') === '')>Pilih ruangan sumber</option>
                             @foreach ($roomOptions as $option)
                                 <option value="{{ $option->id_ruangan }}" @selected((string) old('source_room_id') === (string) $option->id_ruangan)>{{ $option->nama_ruangan }} ({{ $option->jenis_ruangan === 'kantor_guru' ? 'Kantor Guru' : ucfirst($option->jenis_ruangan) }})</option>
                             @endforeach
@@ -527,6 +527,7 @@
                     modal.classList.remove('is-open');
                     modal.setAttribute('aria-hidden', 'true');
                 });
+                window.InfraSPHScrollLock?.unlock();
                 document.body.style.overflow = '';
             }
 
@@ -539,6 +540,7 @@
                 closeAllModals();
                 target.classList.add('is-open');
                 target.setAttribute('aria-hidden', 'false');
+                window.InfraSPHScrollLock?.lock();
                 document.body.style.overflow = 'hidden';
             }
 

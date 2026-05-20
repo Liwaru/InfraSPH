@@ -254,7 +254,7 @@
                         <div class="field-group">
                             <label for="createRoomType">Jenis Ruangan</label>
                             <select id="createRoomType" name="jenis_ruangan" required>
-                                <option value="">Pilih jenis ruangan</option>
+                                <option value="" disabled @selected(session('modal') !== 'create-room' || old('jenis_ruangan') === null || old('jenis_ruangan') === '')>Pilih jenis ruangan</option>
                                 <option value="kelas" @selected(session('modal') === 'create-room' && old('jenis_ruangan') === 'kelas')>Kelas</option>
                                 <option value="lab" @selected(session('modal') === 'create-room' && old('jenis_ruangan') === 'lab')>Lab</option>
                                 <option value="kantor_guru" @selected(session('modal') === 'create-room' && old('jenis_ruangan') === 'kantor_guru')>Kantor Guru</option>
@@ -266,7 +266,7 @@
                                 $selectedCreateUnit = session('modal') === 'create-room' ? old('unit') : '';
                             @endphp
                             <select id="createRoomUnit" name="unit" required>
-                                <option value="">Pilih kelas</option>
+                                <option value="" disabled @selected($selectedCreateUnit === null || $selectedCreateUnit === '')>Pilih kelas</option>
                                 <option value="SMP" @selected($selectedCreateUnit === 'SMP')>SMP</option>
                                 <option value="SMK" @selected($selectedCreateUnit === 'SMK')>SMK</option>
                                 <option value="KANTOR" @selected($selectedCreateUnit === 'KANTOR')>Kantor</option>
@@ -277,7 +277,7 @@
                         <div class="field-group">
                             <label for="createRoomLocation">Lantai</label>
                             <select id="createRoomLocation" name="lokasi" required>
-                                <option value="">Pilih lantai</option>
+                                <option value="" disabled @selected(session('modal') !== 'create-room' || old('lokasi') === null || old('lokasi') === '')>Pilih lantai</option>
                                 <option value="Lantai 1" @selected(session('modal') === 'create-room' && old('lokasi') === 'Lantai 1')>Lantai 1</option>
                                 <option value="Lantai 2" @selected(session('modal') === 'create-room' && old('lokasi') === 'Lantai 2')>Lantai 2</option>
                                 <option value="Lantai 3" @selected(session('modal') === 'create-room' && old('lokasi') === 'Lantai 3')>Lantai 3</option>
@@ -410,6 +410,7 @@
 
                 modal.classList.add('is-open');
                 modal.setAttribute('aria-hidden', 'false');
+                window.InfraSPHScrollLock?.lock();
                 page.style.overflow = 'hidden';
             }
 
@@ -418,6 +419,7 @@
                 modal.setAttribute('aria-hidden', 'true');
 
                 if (!document.querySelector('.modal-shell.is-open')) {
+                    window.InfraSPHScrollLock?.unlock();
                     page.style.overflow = '';
                 }
             }

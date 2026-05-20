@@ -242,10 +242,7 @@
                                             @elseif (in_array($log->action, ['Menghapus', 'Mengubah'], true) && ! empty($log->archive_restored_at))
                                                 <span class="badge action-realize">Sudah dipulihkan</span>
                                             @elseif (in_array($log->action, ['Menghapus', 'Mengubah'], true))
-                                                <button type="button" class="restore-btn" disabled title="Arsip tersedia hanya untuk perubahan setelah fitur ini aktif.">
-                                                    <i class="bi bi-arrow-counterclockwise"></i>
-                                                    Pulihkan
-                                                </button>
+                                                <span class="badge action-update" title="Arsip tersedia hanya untuk perubahan setelah fitur ini aktif.">Tidak ada arsip</span>
                                             @else
                                                 -
                                             @endif

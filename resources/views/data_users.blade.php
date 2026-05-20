@@ -237,7 +237,7 @@
             <div class="modal-header">
                 <div>
                     <div class="modal-title" id="modalCreateUserTitle">Tambah User</div>
-                    <div class="modal-subtitle">Buat akun baru untuk ketua kelas, wali kelas, pengelola sistem, atau kepala sekolah.</div>
+                    <div class="modal-subtitle">Buat akun baru untuk ketua kelas, wali kelas, atau kepala sekolah.</div>
                 </div>
                 <button type="button" class="modal-close js-close-modal" aria-label="Tutup modal">
                     <i class="bi bi-x-lg"></i>
@@ -266,8 +266,8 @@
                     <div class="field-group">
                         <label for="createRole">Role</label>
                         <select id="createRole" name="level" required>
-                            <option value="">Pilih role</option>
-                            @foreach ($roleOptions as $level => $label)
+                            <option value="" disabled @selected(session('modal') !== 'create-user' || old('level') === null || old('level') === '')>Pilih role</option>
+                            @foreach ($createRoleOptions as $level => $label)
                                 <option value="{{ $level }}" @selected(session('modal') === 'create-user' && old('level') === (string) $level)>{{ $label }}</option>
                             @endforeach
                         </select>
@@ -334,7 +334,7 @@
                         <div class="field-group">
                             <label for="editRole{{ $row['id_user'] }}">Role</label>
                             <select id="editRole{{ $row['id_user'] }}" name="level" required>
-                                @foreach ($roleOptions as $level => $label)
+                                @foreach ((int) $row['level'] === 3 ? $roleOptions : $createRoleOptions as $level => $label)
                                     <option value="{{ $level }}" @selected((int) ($isEditModalOpen ? old('level', $row['level']) : $row['level']) === (int) $level)>{{ $label }}</option>
                                 @endforeach
                             </select>
@@ -387,14 +387,14 @@
                     <div class="field-grid">
                         <div class="field-group">
                             <label for="assignmentRoom{{ $row['id_user'] }}">Ruangan / Kelas</label>
+                            @php
+                                $selectedRoom = $isAssignmentModalOpen
+                                    ? old('id_ruangan', $primaryAssignment['id_ruangan'] ?? '')
+                                    : ($primaryAssignment['id_ruangan'] ?? '');
+                            @endphp
                             <select id="assignmentRoom{{ $row['id_user'] }}" name="id_ruangan" required>
-                                <option value="">Pilih ruangan</option>
+                                <option value="" disabled @selected((string) $selectedRoom === '')>Pilih ruangan</option>
                                 @foreach ($availableRooms as $room)
-                                    @php
-                                        $selectedRoom = $isAssignmentModalOpen
-                                            ? old('id_ruangan', $primaryAssignment['id_ruangan'] ?? '')
-                                            : ($primaryAssignment['id_ruangan'] ?? '');
-                                    @endphp
                                     <option value="{{ $room->id_ruangan }}" @selected((string) $selectedRoom === (string) $room->id_ruangan)>
                                         {{ $room->nama_ruangan }} ({{ $room->kode_ruangan }} - {{ ucfirst($room->jenis_ruangan) }})
                                     </option>
@@ -455,6 +455,7 @@
 
                 modal.classList.add('is-open');
                 modal.setAttribute('aria-hidden', 'false');
+                window.InfraSPHScrollLock?.lock();
                 page.style.overflow = 'hidden';
             }
 
@@ -463,6 +464,7 @@
                 modal.setAttribute('aria-hidden', 'true');
 
                 if (!document.querySelector('.modal-shell.is-open')) {
+                    window.InfraSPHScrollLock?.unlock();
                     page.style.overflow = '';
                 }
             }

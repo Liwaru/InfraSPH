@@ -79,8 +79,9 @@
         @media (max-width: 640px) {
             .summary-grid, .filter-form { grid-template-columns: 1fr; }
             .hero-card, .summary-card, .filter-card, .table-card { border-radius: 20px; }
-            .table-scroll { overflow-x: visible; }
-            table.mobile-card-table { min-width: 0; }
+            .table-scroll { width: 100%; max-width: 100%; overflow-x: hidden; }
+            .table-scroll table.mobile-card-table,
+            table.mobile-card-table { width: 100% !important; min-width: 0 !important; max-width: 100% !important; }
             table.mobile-card-table thead { display: none; }
             table.mobile-card-table,
             table.mobile-card-table tbody,

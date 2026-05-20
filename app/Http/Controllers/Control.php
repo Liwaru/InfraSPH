@@ -517,6 +517,29 @@ class Control extends Controller
             ->redirect();
     }
 
+    public function redirectToGoogleLink(Request $request): RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        if (! $this->googleLoginReady()) {
+            return redirect()
+                ->route($this->profileSecurityRouteName())
+                ->with('error', 'Google login belum aktif. Tambahkan konfigurasi Google OAuth dan package Socialite terlebih dahulu.');
+        }
+
+        $request->session()->put('google_link_user_id', (int) ((array) session('user'))['id_user']);
+        $request->session()->put('google_link_redirect', $this->profileSecurityRouteName());
+
+        return \Laravel\Socialite\Facades\Socialite::driver('google')
+            ->redirectUrl($this->googleRedirectUri())
+            ->with([
+                'prompt' => 'select_account',
+            ])
+            ->redirect();
+    }
+
     public function handleGoogleCallback(Request $request): RedirectResponse
     {
         if (! $this->googleLoginReady()) {
@@ -569,6 +592,10 @@ class Control extends Controller
                 ]);
         }
 
+        if ($request->session()->has('google_link_user_id')) {
+            return $this->linkGoogleAccountFromCallback($request, $providerId, $email, $googleUser);
+        }
+
         $linkedAccount = DB::table('social_accounts')
             ->where('provider', 'google')
             ->where('provider_id', $providerId)
@@ -607,6 +634,65 @@ class Control extends Controller
         $this->writeActivityLog($request, self::ACTIVITY_ROUTE_MAP['login.google.callback'], $user);
 
         return redirect()->route('dashboard');
+    }
+
+    private function linkGoogleAccountFromCallback(Request $request, string $providerId, string $email, \Laravel\Socialite\Contracts\User $googleUser): RedirectResponse
+    {
+        $redirectRoute = (string) $request->session()->pull('google_link_redirect', $this->profileSecurityRouteName());
+        $linkUserId = (int) $request->session()->pull('google_link_user_id');
+
+        if ($linkUserId <= 0) {
+            return redirect()->route('login')->withErrors([
+                'google' => 'Sesi penghubungan Google sudah berakhir. Silakan coba lagi.',
+            ]);
+        }
+
+        $user = User::find($linkUserId);
+
+        if (! $user) {
+            return redirect()->route('login')->withErrors([
+                'google' => 'Akun yang ingin dihubungkan tidak ditemukan.',
+            ]);
+        }
+
+        $userEmail = strtolower(trim((string) ($user->email ?? '')));
+
+        if ($userEmail === '' || $email !== $userEmail) {
+            return redirect()
+                ->route($redirectRoute)
+                ->with('error', 'Email Google harus sama dengan email akun InfraSPH yang sedang login.');
+        }
+
+        $linkedAccount = DB::table('social_accounts')
+            ->where('provider', 'google')
+            ->where('provider_id', $providerId)
+            ->first();
+
+        if ($linkedAccount && (int) $linkedAccount->id_user !== (int) $user->id_user) {
+            return redirect()
+                ->route($redirectRoute)
+                ->with('error', 'Akun Google ini sudah terhubung ke user InfraSPH lain.');
+        }
+
+        DB::table('social_accounts')->updateOrInsert(
+            [
+                'provider' => 'google',
+                'provider_id' => $providerId,
+            ],
+            [
+                'id_user' => $user->id_user,
+                'provider_email' => $email,
+                'provider_name' => $googleUser->getName(),
+                'avatar_url' => $googleUser->getAvatar(),
+                'last_login_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        return redirect()
+            ->route($redirectRoute)
+            ->with('success', 'Login Google berhasil dihubungkan ke akun ini.');
     }
 
     /**
@@ -689,6 +775,8 @@ class Control extends Controller
         ];
 
         if (Schema::hasTable('activity_logs')) {
+            $this->backfillArchiveActivityLinks();
+
             $query = DB::table('activity_logs')->orderByDesc('created_at');
 
             if ($filters['name'] !== '') {
@@ -1530,6 +1618,7 @@ class Control extends Controller
             'roomTypeOptions' => $roomTypeOptions,
             'availableRooms' => $availableRooms,
             'roleOptions' => $this->userLevelOptions(),
+            'createRoleOptions' => $this->creatableUserLevelOptions(),
             'filters' => [
                 'q' => $search,
                 'role' => $role,
@@ -1554,7 +1643,7 @@ class Control extends Controller
             'nama' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'nis' => ['nullable', 'string', 'max:50', 'unique:users,nis'],
-            'level' => ['required', 'integer', 'in:1,2,3,4'],
+            'level' => ['required', 'integer', 'in:1,2,4'],
             'password' => ['required', 'string', 'min:6'],
         ], [
             'nama.required' => 'Nama user wajib diisi.',
@@ -1563,6 +1652,7 @@ class Control extends Controller
             'email.unique' => 'Email sudah dipakai user lain.',
             'nis.unique' => 'NIS sudah dipakai user lain.',
             'level.required' => 'Role user wajib dipilih.',
+            'level.in' => 'Role superadmin tidak dapat dibuat dari form tambah user.',
             'password.required' => 'Password wajib diisi.',
             'password.min' => 'Password minimal 6 karakter.',
         ]);
@@ -1630,6 +1720,14 @@ class Control extends Controller
             return redirect()
                 ->route('superadmin.users', $this->buildSuperadminUserRedirectFilters($request))
                 ->withErrors($validator)
+                ->withInput()
+                ->with('modal', 'edit-user-'.$userId);
+        }
+
+        if ((int) $targetUser->level !== 3 && (int) $request->input('level') === 3) {
+            return redirect()
+                ->route('superadmin.users', $this->buildSuperadminUserRedirectFilters($request))
+                ->withErrors(['level' => 'User biasa tidak dapat diubah menjadi superadmin dari halaman ini.'])
                 ->withInput()
                 ->with('modal', 'edit-user-'.$userId);
         }
@@ -2118,23 +2216,42 @@ class Control extends Controller
             ->with('error', 'Ruangan yang ingin dihapus tidak ditemukan.');
         }
 
-        $hasAssignments = DB::table('penugasan_ruangan')->where('id_ruangan', $roomId)->exists();
-        $hasInventory = DB::table('inventaris_ruangan')->where('id_ruangan', $roomId)->exists();
-        $hasRequests = DB::table('permintaan')->where('id_ruangan', $roomId)->exists();
+        try {
+            DB::transaction(function () use ($roomId, $room): void {
+                $this->archiveDeletedRecord('ruangan', 'id_ruangan', $roomId, 'Data Ruangan', '#'.$roomId, $room);
 
-        if ($hasAssignments || $hasInventory || $hasRequests) {
+                $requestIds = DB::table('permintaan')
+                    ->where('id_ruangan', $roomId)
+                    ->pluck('id_permintaan')
+                    ->map(fn ($value) => (int) $value)
+                    ->all();
+
+                if ($requestIds !== []) {
+                    DB::table('detail_permintaan')->whereIn('id_permintaan', $requestIds)->delete();
+                    DB::table('persetujuan_permintaan')->whereIn('id_permintaan', $requestIds)->delete();
+                    DB::table('riwayat_inventaris')->whereIn('id_permintaan', $requestIds)->update(['id_permintaan' => null]);
+                    DB::table('permintaan')->whereIn('id_permintaan', $requestIds)->delete();
+                }
+
+                DB::table('riwayat_inventaris')->where('id_ruangan', $roomId)->delete();
+                DB::table('inventaris_ruangan')->where('id_ruangan', $roomId)->delete();
+                DB::table('penugasan_ruangan')->where('id_ruangan', $roomId)->delete();
+                DB::table('ruangan')->where('id_ruangan', $roomId)->delete();
+            });
+        } catch (\Throwable $exception) {
+            Log::warning('Room deletion failed.', [
+                'room_id' => $roomId,
+                'message' => $exception->getMessage(),
+            ]);
+
             return redirect()
-            ->route('superadmin.rooms', $this->buildSuperadminRoomRedirectFilters($request))
-            ->with('error', 'Ruangan tidak bisa dihapus karena masih terhubung ke penugasan, inventaris, atau pengajuan.');
+                ->route('superadmin.rooms', $this->buildSuperadminRoomRedirectFilters($request))
+                ->with('error', 'Ruangan gagal dihapus. Coba lagi atau cek data terkait ruangan tersebut.');
         }
-
-        $this->archiveDeletedRecord('ruangan', 'id_ruangan', $roomId, 'Data Ruangan', '#'.$roomId, $room);
-
-        DB::table('ruangan')->where('id_ruangan', $roomId)->delete();
 
         return redirect()
             ->route('superadmin.rooms', $this->buildSuperadminRoomRedirectFilters($request))
-            ->with('success', 'Ruangan berhasil dihapus.');
+            ->with('success', 'Ruangan dan data terkaitnya berhasil dihapus.');
     }
 
     public function superadminItems(Request $request): View|RedirectResponse
@@ -3258,24 +3375,46 @@ class Control extends Controller
             ? trim((string) (($data['filters']['date_from'] ?? '-') . ' s/d ' . ($data['filters']['date_to'] ?? '-')))
             : 'Semua periode';
 
-        $html = '<html><head><meta charset="UTF-8"><style>'
-            .'body{font-family:Arial,sans-serif;padding:24px;color:#1f2937;}'
+        if ($format === 'excel') {
+            [$spreadsheetHeaders, $spreadsheetRows] = $this->buildSuperadminReportSpreadsheetRows($section, $rows);
+
+            return $this->spreadsheetExportResponse(
+                $title,
+                $periodLabel,
+                $spreadsheetHeaders,
+                $spreadsheetRows,
+                str_replace(' ', '_', strtolower($title)).'.xls'
+            );
+        }
+
+        $pageStyle = $format === 'word'
+            ? '@page WordSection1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:22pt 18pt 22pt 18pt;}div.WordSection1{page:WordSection1;}'
+            : '@page{size:A4;margin:0;}';
+        $bodyOpen = $format === 'word' ? '<body><div class="WordSection1">' : '<body>';
+        $bodyClose = $format === 'word' ? '</div></body></html>' : '</body></html>';
+
+        $html = '<html><head><meta charset="UTF-8"><title>'.e($title).'</title><style>'
+            .$pageStyle
+            .'html,body{margin:0;}'
+            .'body{font-family:Arial,sans-serif;padding:14mm;color:#1f2937;}'
+            .($format === 'word' ? 'body{padding:0;}table{mso-table-lspace:0pt;mso-table-rspace:0pt;}' : '')
+            .'@media print{html,body{margin:0!important;}body{padding:14mm!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'
             .'.brand{margin-bottom:18px;border-bottom:2px solid #ffe1cf;padding-bottom:14px;}'
             .'.brand-small{font-size:13px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#ff7b2f;margin-bottom:4px;}'
             .'.brand-name{font-size:30px;font-weight:800;letter-spacing:-0.04em;color:#ff5900;line-height:1.05;}'
             .'h1{color:#1f2937;margin:0 0 8px;font-size:24px;}'
             .'p{margin:0 0 16px;color:#6b7280;}'
-            .'table{width:100%;border-collapse:collapse;margin-top:16px;}'
-            .'th,td{border:1px solid #d9d9d9;padding:10px;text-align:left;}'
+            .'table{width:100%;border-collapse:collapse;margin-top:16px;table-layout:fixed;}'
+            .'th,td{border:1px solid #d9d9d9;padding:6px;text-align:left;font-size:10px;line-height:1.25;vertical-align:top;word-break:break-word;overflow-wrap:anywhere;}'
             .'th{background:#fff3eb;}'
-            .'</style></head><body>'
+            .'</style></head>'.$bodyOpen
             .'<div class="brand"><div class="brand-small">Sekolah</div><div class="brand-name">Permata Harapan</div></div>'
             .'<h1>'.$title.'</h1>'
             .'<p>Periode: '.$periodLabel.'</p>'
             .'<table><thead>'.$tableHeader.'</thead><tbody>'.$tableRows.'</tbody></table>';
 
         if ($format === 'print') {
-            $html .= '<script>window.onload=function(){window.print();}</script>';
+            $html .= '<script>window.onload=function(){document.title='.json_encode($title).';setTimeout(function(){window.print();},100);}</script>';
             $html .= '</body></html>';
 
             return response($html, 200, [
@@ -3283,15 +3422,11 @@ class Control extends Controller
             ]);
         }
 
-        $html .= '</body></html>';
-        $extension = $format === 'word' ? 'doc' : 'xls';
-        $contentType = $format === 'word'
-            ? 'application/msword; charset=UTF-8'
-            : 'application/vnd.ms-excel; charset=UTF-8';
-        $filename = str_replace(' ', '_', strtolower($title)).'.'.$extension;
+        $html .= $bodyClose;
+        $filename = str_replace(' ', '_', strtolower($title)).'.doc';
 
         return response($html, 200, [
-            'Content-Type' => $contentType,
+            'Content-Type' => 'application/msword; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
     }
@@ -4319,7 +4454,7 @@ class Control extends Controller
             $section = 'inventory';
         }
 
-        if (! in_array($format, ['excel', 'word'], true)) {
+        if (! in_array($format, ['excel', 'word', 'print'], true)) {
             $format = 'excel';
         }
 
@@ -4371,34 +4506,60 @@ class Control extends Controller
             }
         }
 
-        $extension = $format === 'word' ? 'doc' : 'xls';
-        $contentType = $format === 'word'
-            ? 'application/msword'
-            : 'application/vnd.ms-excel';
-
-        $filename = str_replace(' ', '_', strtolower($title)).'_'.$year.'_'.$month.'.'.$extension;
-
         $periodLabel = \Carbon\Carbon::create()->month($month)->translatedFormat('F').' '.$year;
 
-        $html = '<html><head><meta charset="UTF-8"><style>'
-            .'body{font-family:Arial,sans-serif;padding:24px;color:#1f2937;}'
+        if ($format === 'excel') {
+            [$spreadsheetHeaders, $spreadsheetRows] = $this->buildOwnerReportSpreadsheetRows($section, $reportData);
+
+            return $this->spreadsheetExportResponse(
+                $title,
+                $periodLabel,
+                $spreadsheetHeaders,
+                $spreadsheetRows,
+                str_replace(' ', '_', strtolower($title)).'_'.$year.'_'.$month.'.xls'
+            );
+        }
+
+        $pageStyle = $format === 'word'
+            ? '@page WordSection1{size:841.9pt 595.3pt;mso-page-orientation:landscape;margin:22pt 18pt 22pt 18pt;}div.WordSection1{page:WordSection1;}'
+            : '@page{size:A4;margin:0;}';
+        $bodyOpen = $format === 'word' ? '<body><div class="WordSection1">' : '<body>';
+        $bodyClose = $format === 'word' ? '</div></body></html>' : '</body></html>';
+
+        $html = '<html><head><meta charset="UTF-8"><title>'.e($title).'</title><style>'
+            .$pageStyle
+            .'html,body{margin:0;}'
+            .'body{font-family:Arial,sans-serif;padding:14mm;color:#1f2937;}'
+            .($format === 'word' ? 'body{padding:0;}table{mso-table-lspace:0pt;mso-table-rspace:0pt;}' : '')
+            .'@media print{html,body{margin:0!important;}body{padding:14mm!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'
             .'.brand{margin-bottom:18px;border-bottom:2px solid #ffe1cf;padding-bottom:14px;}'
             .'.brand-small{font-size:13px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#ff7b2f;margin-bottom:4px;}'
             .'.brand-name{font-size:30px;font-weight:800;letter-spacing:-0.04em;color:#ff5900;line-height:1.05;}'
             .'h1{color:#1f2937;margin:0 0 8px;font-size:24px;}'
             .'p{margin:0 0 16px;color:#6b7280;}'
-            .'table{width:100%;border-collapse:collapse;margin-top:16px;}'
-            .'th,td{border:1px solid #d9d9d9;padding:10px;text-align:left;}'
+            .'table{width:100%;border-collapse:collapse;margin-top:16px;table-layout:fixed;}'
+            .'th,td{border:1px solid #d9d9d9;padding:6px;text-align:left;font-size:10px;line-height:1.25;vertical-align:top;word-break:break-word;overflow-wrap:anywhere;}'
             .'th{background:#fff3eb;}'
-            .'</style></head><body>'
+            .'</style></head>'.$bodyOpen
             .'<div class="brand"><div class="brand-small">Sekolah</div><div class="brand-name">Permata Harapan</div></div>'
             .'<h1>'.$title.'</h1>'
             .'<p>Periode: '.$periodLabel.'</p>'
-            .'<table><thead>'.$tableHeader.'</thead><tbody>'.$tableRows.'</tbody></table>'
-            .'</body></html>';
+            .'<table><thead>'.$tableHeader.'</thead><tbody>'.$tableRows.'</tbody></table>';
+
+        if ($format === 'print') {
+            $html .= '<script>window.onload=function(){document.title='.json_encode($title).';setTimeout(function(){window.print();},100);}</script>';
+            $html .= '</body></html>';
+
+            return response($html, 200, [
+                'Content-Type' => 'text/html; charset=UTF-8',
+            ]);
+        }
+
+        $html .= $bodyClose;
+        $filename = str_replace(' ', '_', strtolower($title)).'_'.$year.'_'.$month.'.doc';
 
         return response($html, 200, [
-            'Content-Type' => $contentType.'; charset=UTF-8',
+            'Content-Type' => 'application/msword; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
     }
@@ -5224,6 +5385,18 @@ class Control extends Controller
         ];
     }
 
+    /**
+     * @return array<int, string>
+     */
+    private function creatableUserLevelOptions(): array
+    {
+        return [
+            1 => 'Ketua Kelas',
+            2 => 'Wali Kelas',
+            4 => 'Kepala Sekolah',
+        ];
+    }
+
     private function formatUserLevelLabel(int $level): string
     {
         return $this->userLevelOptions()[$level] ?? 'Pengguna';
@@ -5787,15 +5960,44 @@ class Control extends Controller
         return $clientId !== '' && $clientSecret !== '';
     }
 
+    private function profileSecurityRouteName(): string
+    {
+        return session('user.level') === 4 ? 'security.show' : 'profile.security';
+    }
+
     private function googleRedirectUri(): string
     {
         $configuredRedirect = trim((string) config('services.google.redirect'));
 
-        if ($configuredRedirect !== '') {
+        if ($configuredRedirect !== '' && $this->isValidAbsoluteUrl($configuredRedirect)) {
             return $configuredRedirect;
         }
 
-        return route('login.google.callback');
+        $appUrl = trim((string) config('app.url'));
+
+        if (! $this->isValidAbsoluteUrl($appUrl)) {
+            $appUrl = 'https://hendrik.rplkodingan.com';
+        }
+
+        return rtrim($appUrl, '/').'/auth/google/callback';
+    }
+
+    private function isValidAbsoluteUrl(string $url): bool
+    {
+        if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        $host = parse_url($url, PHP_URL_HOST);
+
+        if (! in_array($scheme, ['http', 'https'], true) || ! is_string($host) || $host === '') {
+            return false;
+        }
+
+        $urlAfterScheme = substr($url, strlen($scheme.'://'));
+
+        return ! str_contains($urlAfterScheme, '://');
     }
 
     private function mailLoginOtpReady(): bool
@@ -5893,6 +6095,157 @@ class Control extends Controller
         }
 
         return [$tableHeader, $tableRows];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $rows
+     * @return array{0:array<int, string>,1:array<int, array<int, mixed>>}
+     */
+    private function buildSuperadminReportSpreadsheetRows(string $section, $rows): array
+    {
+        if ($section === 'incoming') {
+            return [
+                ['Tanggal', 'Nama Barang', 'Ruangan', 'Jenis Ruangan', 'Jumlah', 'Sumber', 'Ditambahkan Oleh'],
+                $rows->map(fn (array $row): array => [
+                    $row['tanggal'],
+                    $row['barang'],
+                    $row['ruangan'],
+                    $row['jenis_ruangan'],
+                    $row['jumlah'],
+                    $row['sumber'],
+                    $row['ditambahkan_oleh'],
+                ])->all(),
+            ];
+        }
+
+        if ($section === 'condition') {
+            return [
+                ['Nama Barang', 'Ruangan', 'Jumlah Baik', 'Jumlah Rusak', 'Kondisi', 'Keterangan'],
+                $rows->map(fn (array $row): array => [
+                    $row['barang'],
+                    $row['ruangan'],
+                    $row['jumlah_baik'],
+                    $row['jumlah_rusak'],
+                    $row['kondisi'],
+                    $row['keterangan'],
+                ])->all(),
+            ];
+        }
+
+        if ($section === 'requests') {
+            return [
+                ['Pengaju', 'Barang', 'Ruangan', 'Jumlah', 'Tanggal Pengajuan', 'Tanggal Realisasi', 'Status Admin', 'Status Owner', 'Status Realisasi'],
+                $rows->map(fn (array $row): array => [
+                    $row['pengaju'],
+                    $row['barang'],
+                    $row['ruangan'],
+                    $row['jumlah'],
+                    $row['tanggal_pengajuan'],
+                    $row['tanggal_realisasi'],
+                    $row['status_admin'],
+                    $row['status_owner'],
+                    $row['status_realisasi'],
+                ])->all(),
+            ];
+        }
+
+        return [
+            ['Ruangan', 'Barang', 'Kategori', 'Jumlah', 'Kondisi', 'Tanggal Masuk'],
+            $rows->map(fn (array $row): array => [
+                $row['ruangan'],
+                $row['barang'],
+                $row['kategori'],
+                $row['jumlah'],
+                $row['kondisi'],
+                $row['tanggal_masuk'],
+            ])->all(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $reportData
+     * @return array{0:array<int, string>,1:array<int, array<int, mixed>>}
+     */
+    private function buildOwnerReportSpreadsheetRows(string $section, array $reportData): array
+    {
+        if ($section === 'requests') {
+            return [
+                ['Tanggal', 'Barang', 'Kelas', 'Peminta', 'Jenis', 'Jumlah', 'Status'],
+                collect($reportData['requestRows'] ?? [])->map(fn (array $row): array => [
+                    $row['tanggal'],
+                    $row['barang'],
+                    $row['kelas'],
+                    $row['peminta'],
+                    $row['jenis'],
+                    $row['jumlah'],
+                    $row['status'],
+                ])->all(),
+            ];
+        }
+
+        if ($section === 'classes') {
+            return [
+                ['Kelas', 'Kode', 'Total Barang', 'Baik', 'Rusak', 'Pengajuan'],
+                collect($reportData['classRows'] ?? [])->map(fn (array $row): array => [
+                    $row['kelas'],
+                    $row['kode'],
+                    $row['total_barang'],
+                    $row['baik'],
+                    $row['rusak'],
+                    $row['pengajuan'],
+                ])->all(),
+            ];
+        }
+
+        return [
+            ['Barang', 'Total', 'Baik', 'Rusak'],
+            collect($reportData['inventoryRows'] ?? [])->map(fn (array $row): array => [
+                $row['nama_barang'],
+                $row['total'],
+                $row['baik'],
+                $row['rusak'],
+            ])->all(),
+        ];
+    }
+
+    /**
+     * @param  array<int, string>  $headers
+     * @param  array<int, array<int, mixed>>  $rows
+     */
+    private function spreadsheetExportResponse(string $title, string $periodLabel, array $headers, array $rows, string $filename): \Symfony\Component\HttpFoundation\Response
+    {
+        $lines = [
+            [$title],
+            ['Periode', $periodLabel],
+            [],
+            $headers,
+        ];
+
+        foreach ($rows as $row) {
+            $lines[] = $row;
+        }
+
+        $content = "\xEF\xBB\xBF".collect($lines)
+            ->map(fn (array $row): string => collect($row)
+                ->map(fn (mixed $cell): string => $this->spreadsheetCell($cell))
+                ->implode("\t"))
+            ->implode("\r\n");
+
+        return response($content, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    private function spreadsheetCell(mixed $value): string
+    {
+        $cell = preg_replace('/[\t\r\n]+/', ' ', trim((string) $value)) ?? '';
+
+        if ($cell !== '' && in_array($cell[0], ['=', '+', '-', '@'], true)) {
+            return "'".$cell;
+        }
+
+        return $cell;
     }
 
     private function nullableTrimmed(mixed $value): ?string
@@ -6106,6 +6459,51 @@ class Control extends Controller
                 'activity_log_id' => $logId,
                 'updated_at' => now(),
             ]);
+    }
+
+    private function backfillArchiveActivityLinks(): void
+    {
+        if (
+            ! Schema::hasTable('activity_logs')
+            || ! Schema::hasTable('data_change_archives')
+            || ! Schema::hasColumn('data_change_archives', 'activity_log_id')
+        ) {
+            return;
+        }
+
+        DB::table('data_change_archives')
+            ->whereNull('activity_log_id')
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get()
+            ->each(function (object $archive): void {
+                $query = DB::table('activity_logs')
+                    ->where('action', $archive->action)
+                    ->where('module', $archive->module)
+                    ->whereBetween('created_at', [
+                        \Carbon\Carbon::parse($archive->created_at)->subMinutes(5),
+                        \Carbon\Carbon::parse($archive->created_at)->addMinutes(5),
+                    ]);
+
+                if ($archive->target === null || $archive->target === '') {
+                    $query->whereNull('target');
+                } else {
+                    $query->where('target', $archive->target);
+                }
+
+                $logId = $query->orderByDesc('id')->value('id');
+
+                if ($logId === null) {
+                    return;
+                }
+
+                DB::table('data_change_archives')
+                    ->where('id', $archive->id)
+                    ->update([
+                        'activity_log_id' => $logId,
+                        'updated_at' => now(),
+                    ]);
+            });
     }
 
     private function resolveActivityTarget(Request $request, array $activity): ?string

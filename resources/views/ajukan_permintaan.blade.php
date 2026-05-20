@@ -93,7 +93,7 @@
                                 <div class="field">
                                     <label for="new_item_id">Nama Barang</label>
                                     <select name="new_item_id" id="new_item_id">
-                                        <option value="">Pilih barang yang ingin diajukan</option>
+                                        <option value="" disabled @selected(old('new_item_id') === null || old('new_item_id') === '')>Pilih barang yang ingin diajukan</option>
                                         @foreach ($availableItems as $item)
                                             <option value="{{ $item->id_barang }}" data-satuan="{{ $item->satuan }}" {{ (string) old('new_item_id') === (string) $item->id_barang ? 'selected' : '' }}>
                                                 {{ $item->nama_barang }}
@@ -120,7 +120,7 @@
                                     <div class="field">
                                         <label for="priority">Prioritas</label>
                                         <select name="priority" id="priority">
-                                            <option value="">Pilih prioritas</option>
+                                            <option value="" disabled @selected(old('priority') === null || old('priority') === '')>Pilih prioritas</option>
                                             <option value="biasa" {{ old('priority') === 'biasa' ? 'selected' : '' }}>Biasa</option>
                                             <option value="mendesak" {{ old('priority') === 'mendesak' ? 'selected' : '' }}>Mendesak</option>
                                         </select>
@@ -141,7 +141,7 @@
                                 <div class="field">
                                     <label for="repair_item_id">Pilih Barang Inventaris</label>
                                     <select name="repair_item_id" id="repair_item_id">
-                                        <option value="">Pilih barang yang ingin diperbaiki</option>
+                                        <option value="" disabled @selected(old('repair_item_id') === null || old('repair_item_id') === '')>Pilih barang yang ingin diperbaiki</option>
                                         @foreach ($roomInventory as $item)
                                             <option value="{{ $item->id_barang }}" data-satuan="{{ $item->satuan }}" {{ (string) old('repair_item_id') === (string) $item->id_barang ? 'selected' : '' }}>
                                                 {{ $item->nama_barang }} (Baik: {{ $item->jumlah_baik }}, Rusak: {{ $item->jumlah_rusak }})
@@ -168,7 +168,7 @@
                                     <div class="field">
                                         <label for="damage_level">Tingkat Kerusakan</label>
                                         <select name="damage_level" id="damage_level">
-                                            <option value="">Pilih tingkat kerusakan</option>
+                                            <option value="" disabled @selected(old('damage_level') === null || old('damage_level') === '')>Pilih tingkat kerusakan</option>
                                             <option value="ringan" {{ old('damage_level') === 'ringan' ? 'selected' : '' }}>Ringan</option>
                                             <option value="sedang" {{ old('damage_level') === 'sedang' ? 'selected' : '' }}>Sedang</option>
                                             <option value="berat" {{ old('damage_level') === 'berat' ? 'selected' : '' }}>Berat</option>

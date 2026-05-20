@@ -67,6 +67,13 @@
         pointer-events: none;
     }
 
+    .app-shell.sidebar-mobile-open .chatbot-shell,
+    .app-shell.sidebar-mobile-open .chatbot-fab {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
     .chatbot-hero {
         min-height: 156px;
         padding: 1rem 1.15rem 1.05rem;

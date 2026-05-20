@@ -52,10 +52,10 @@
                     </div>
                     <div class="filter-actions">
                         <button type="submit" class="filter-btn">Terapkan</button>
-                        <button type="button" class="action-btn" onclick="window.print()">
+                        <a href="{{ route('owner.reports.export', ['section' => $section, 'month' => $month, 'year' => $year, 'format' => 'print']) }}" class="action-btn" target="_blank" rel="noopener noreferrer">
                             <i class="bi bi-printer"></i>
                             Print
-                        </button>
+                        </a>
                         <a href="{{ route('owner.reports.export', ['section' => $section, 'month' => $month, 'year' => $year, 'format' => 'excel']) }}" class="action-btn">
                             <i class="bi bi-file-earmark-excel"></i>
                             Export Excel

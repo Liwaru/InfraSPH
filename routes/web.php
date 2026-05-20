@@ -74,6 +74,7 @@ Route::prefix('auth')->group(function () {
     Route::post('/login/otp/request', [Control::class, 'requestEmailOtp'])->name('login.otp.request');
     Route::post('/login/otp/verify', [Control::class, 'verifyEmailOtp'])->name('login.otp.verify');
     Route::get('/google/redirect', [Control::class, 'redirectToGoogle'])->name('login.google.redirect');
+    Route::get('/google/link', [Control::class, 'redirectToGoogleLink'])->name('login.google.link');
     Route::get('/google/callback', [Control::class, 'handleGoogleCallback'])->name('login.google.callback');
     Route::post('/logout', [Control::class, 'logout'])->name('logout');
 });
