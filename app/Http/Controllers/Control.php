@@ -8,8 +8,10 @@ use App\Services\MenuAccessService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
@@ -184,6 +186,10 @@ class Control extends Controller
         'superadmin.reports.export' => 'laporan_superadmin',
         'hak_akses.index' => 'hak_akses',
         'hak_akses.update' => 'hak_akses',
+        'superadmin.database' => 'database_tools',
+        'superadmin.database.backup' => 'database_tools',
+        'superadmin.database.reset' => 'database_tools',
+        'superadmin.database.import' => 'database_tools',
         'owner.rooms' => 'semua_ruangan',
         'owner.inventories' => 'inventaris_sekolah',
         'owner.requests.approval' => 'persetujuan_pengajuan',
@@ -218,6 +224,9 @@ class Control extends Controller
         'superadmin.items.delete' => ['action' => 'Menghapus', 'module' => 'Inventaris', 'target_param' => 'inventoryId', 'detail' => 'Menghapus data barang inventaris.'],
         'superadmin.requests.realization.store' => ['action' => 'Merealisasikan', 'module' => 'Pengajuan', 'target_param' => 'requestId', 'detail' => 'Merealisasikan pengajuan menjadi inventaris.'],
         'hak_akses.update' => ['action' => 'Mengubah', 'module' => 'Hak Akses', 'detail' => 'Memperbarui hak akses menu.'],
+        'superadmin.database.backup' => ['action' => 'Mengunduh', 'module' => 'Database', 'detail' => 'Mengunduh backup database.'],
+        'superadmin.database.reset' => ['action' => 'Menghapus', 'module' => 'Database', 'detail' => 'Mereset database dan menjalankan seeder ulang.'],
+        'superadmin.database.import' => ['action' => 'Mengubah', 'module' => 'Database', 'detail' => 'Mengimpor file SQL ke database.'],
         'activity.data.restore' => ['action' => 'Memulihkan', 'module' => 'Catatan Aktivitas', 'target_param' => 'archiveId', 'detail' => 'Memulihkan data dari arsip catatan aktivitas.'],
         'requests.store' => ['action' => 'Menambah', 'module' => 'Pengajuan', 'target_input' => 'request_type', 'detail' => 'Membuat pengajuan baru.'],
         'requests.destroy' => ['action' => 'Menghapus', 'module' => 'Pengajuan', 'target_param' => 'requestId', 'detail' => 'Menghapus riwayat pengajuan.'],
@@ -501,6 +510,7 @@ class Control extends Controller
         }
 
         return \Laravel\Socialite\Facades\Socialite::driver('google')
+            ->redirectUrl($this->googleRedirectUri())
             ->with([
                 'prompt' => 'select_account',
             ])
@@ -519,13 +529,22 @@ class Control extends Controller
         }
 
         try {
-            $googleUser = \Laravel\Socialite\Facades\Socialite::driver('google')->stateless()->user();
+            $googleUser = \Laravel\Socialite\Facades\Socialite::driver('google')
+                ->redirectUrl($this->googleRedirectUri())
+                ->stateless()
+                ->user();
         } catch (\Throwable $exception) {
+            Log::warning('Google login callback failed.', [
+                'message' => $exception->getMessage(),
+                'redirect_uri' => $this->googleRedirectUri(),
+                'app_url' => config('app.url'),
+            ]);
+
             return redirect()
                 ->route('login')
                 ->with('active_login_method', 'google')
                 ->withErrors([
-                    'google' => 'Autentikasi Google gagal diproses. Coba lagi beberapa saat lagi.',
+                    'google' => 'Autentikasi Google gagal diproses. Pastikan redirect URI Google sama dengan domain aplikasi.',
                 ]);
         }
 
@@ -646,11 +665,11 @@ class Control extends Controller
 
         $dashboard = $this->resolveDashboardData($user);
         $filters = [
-            'tab' => $request->query('tab') === 'data' ? 'data' : 'aktivitas',
-            'name' => trim((string) $request->query('name', '')),
-            'role' => trim((string) $request->query('role', '')),
-            'date_start' => trim((string) $request->query('date_start', '')),
-            'date_end' => trim((string) $request->query('date_end', '')),
+            'tab' => $this->queryString($request, 'tab') === 'data' ? 'data' : 'aktivitas',
+            'name' => $this->queryString($request, 'name'),
+            'role' => $this->queryString($request, 'role'),
+            'date_start' => $this->queryString($request, 'date_start'),
+            'date_end' => $this->queryString($request, 'date_end'),
         ];
 
         $roles = [
@@ -1045,8 +1064,8 @@ class Control extends Controller
         }
 
         $user = (array) session('user');
-        if ((int) ($user['level'] ?? 0) !== 1) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $assignments = $this->getActiveAssignmentsForUser($user);
@@ -1068,8 +1087,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 2) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $assignments = $this->getActiveAssignmentsForUser($user);
@@ -1091,13 +1110,13 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 4) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $search = trim((string) $request->query('q', ''));
-        $type = strtolower(trim((string) $request->query('type', 'semua')));
+        $search = $this->queryString($request, 'q');
+        $type = strtolower($this->queryString($request, 'type', 'semua'));
 
         $roomsQuery = DB::table('ruangan')
             ->select('id_ruangan', 'nama_ruangan', 'kode_ruangan', 'jenis_ruangan')
@@ -1262,13 +1281,13 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 4) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $search = trim((string) $request->query('q', ''));
-        $status = strtolower(trim((string) $request->query('status', 'semua')));
+        $search = $this->queryString($request, 'q');
+        $status = strtolower($this->queryString($request, 'status', 'semua'));
 
         $inventoryBase = DB::table('inventaris_ruangan as ir')
             ->join('barang as b', 'b.id_barang', '=', 'ir.id_barang')
@@ -1374,14 +1393,14 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $search = trim((string) $request->query('q', ''));
-        $role = trim((string) $request->query('role', 'semua'));
-        $roomType = trim((string) $request->query('room_type', 'semua'));
+        $search = $this->queryString($request, 'q');
+        $role = $this->queryString($request, 'role', 'semua');
+        $roomType = $this->queryString($request, 'room_type', 'semua');
         $validRoleFilters = ['semua', '1', '2', '3', '4'];
 
         if (! in_array($role, $validRoleFilters, true)) {
@@ -1527,8 +1546,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $validator = Validator::make($request->all(), [
@@ -1579,8 +1598,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $targetUser = DB::table('users')->where('id_user', $userId)->first();
@@ -1661,8 +1680,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $targetUser = DB::table('users')->where('id_user', $userId)->first();
@@ -1743,14 +1762,14 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $search = trim((string) $request->query('q', ''));
-        $type = trim((string) $request->query('type', 'semua'));
-        $unit = trim((string) $request->query('unit', 'semua'));
+        $search = $this->queryString($request, 'q');
+        $type = $this->queryString($request, 'type', 'semua');
+        $unit = $this->queryString($request, 'unit', 'semua');
 
         $typeOptions = DB::table('ruangan')
             ->selectRaw('LOWER(jenis_ruangan) as jenis_ruangan')
@@ -1936,8 +1955,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $validator = Validator::make($request->all(), [
@@ -2004,8 +2023,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $room = DB::table('ruangan')->where('id_ruangan', $roomId)->first();
@@ -2087,8 +2106,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $room = DB::table('ruangan')->where('id_ruangan', $roomId)->first();
@@ -2126,16 +2145,16 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $search = trim((string) $request->query('q', ''));
-        $category = trim((string) $request->query('category', 'semua'));
-        $room = trim((string) $request->query('room', 'semua'));
-        $roomType = trim((string) $request->query('room_type', 'semua'));
-        $condition = trim((string) $request->query('condition', 'semua'));
+        $search = $this->queryString($request, 'q');
+        $category = $this->queryString($request, 'category', 'semua');
+        $room = $this->queryString($request, 'room', 'semua');
+        $roomType = $this->queryString($request, 'room_type', 'semua');
+        $condition = $this->queryString($request, 'condition', 'semua');
 
         $categoryOptions = DB::table('kategori_barang')
             ->orderBy('nama_kategori')
@@ -2274,8 +2293,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $validator = Validator::make($request->all(), [
@@ -2368,8 +2387,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $validator = Validator::make($request->all(), [
@@ -2477,8 +2496,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $inventoryRow = DB::table('inventaris_ruangan')->where('id_inventaris_ruangan', $inventoryId)->first();
@@ -2575,8 +2594,8 @@ class Control extends Controller
 
         $sessionUser = (array) session('user');
 
-        if ((int) ($sessionUser['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $inventoryRow = DB::table('inventaris_ruangan')->where('id_inventaris_ruangan', $inventoryId)->first();
@@ -2604,15 +2623,15 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $status = strtolower(trim((string) $request->query('status', 'menunggu')));
-        $room = trim((string) $request->query('room', 'semua'));
-        $date = trim((string) $request->query('date', ''));
-        $search = trim((string) $request->query('q', ''));
+        $status = strtolower($this->queryString($request, 'status', 'menunggu'));
+        $room = $this->queryString($request, 'room', 'semua');
+        $date = $this->queryString($request, 'date');
+        $search = $this->queryString($request, 'q');
 
         if (! in_array($status, ['menunggu', 'selesai', 'ditolak', 'semua'], true)) {
             $status = 'menunggu';
@@ -2777,8 +2796,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $requestRecord = DB::table('permintaan')->where('id_permintaan', $requestId)->first();
@@ -2918,19 +2937,19 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $section = strtolower(trim((string) $request->query('section', 'inventory')));
-        $dateFrom = trim((string) $request->query('date_from', ''));
-        $dateTo = trim((string) $request->query('date_to', ''));
-        $room = trim((string) $request->query('room', 'semua'));
-        $roomType = trim((string) $request->query('room_type', 'semua'));
-        $category = trim((string) $request->query('category', 'semua'));
-        $condition = trim((string) $request->query('condition', 'semua'));
-        $requestStatus = trim((string) $request->query('request_status', 'semua'));
+        $section = strtolower($this->queryString($request, 'section', 'inventory'));
+        $dateFrom = $this->queryString($request, 'date_from');
+        $dateTo = $this->queryString($request, 'date_to');
+        $room = $this->queryString($request, 'room', 'semua');
+        $roomType = $this->queryString($request, 'room_type', 'semua');
+        $category = $this->queryString($request, 'category', 'semua');
+        $condition = $this->queryString($request, 'condition', 'semua');
+        $requestStatus = $this->queryString($request, 'request_status', 'semua');
 
         if (! in_array($section, ['inventory', 'incoming', 'condition', 'requests'], true)) {
             $section = 'inventory';
@@ -3206,8 +3225,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $mirrorRequest = Request::create('/superadmin/laporan', 'GET', $request->query());
@@ -3220,7 +3239,7 @@ class Control extends Controller
         $data = $view->getData();
         $section = (string) ($data['section'] ?? 'inventory');
         $rows = collect(($data['rows'] ?? new LengthAwarePaginator([], 0, 10))->items());
-        $format = strtolower(trim((string) $request->query('format', 'excel')));
+        $format = strtolower($this->queryString($request, 'format', 'excel'));
 
         if (! in_array($format, ['excel', 'word', 'print'], true)) {
             $format = 'excel';
@@ -3285,8 +3304,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
@@ -3302,6 +3321,140 @@ class Control extends Controller
         ]);
     }
 
+    public function databaseTools(): View|RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        $user = (array) session('user');
+
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
+        }
+
+        $connectionName = config('database.default');
+        $connection = config("database.connections.{$connectionName}", []);
+        $backupPath = storage_path('app/database-backups');
+        $latestBackup = collect(is_dir($backupPath) ? glob($backupPath.DIRECTORY_SEPARATOR.'*.sql') ?: [] : [])
+            ->map(fn (string $path) => [
+                'name' => basename($path),
+                'size' => filesize($path) ?: 0,
+                'created_at' => filemtime($path) ?: null,
+            ])
+            ->sortByDesc('created_at')
+            ->first();
+
+        return view('database_tools', [
+            'user' => $user,
+            'dashboard' => $this->resolveDashboardData($user),
+            'databaseInfo' => [
+                'connection' => $connectionName,
+                'driver' => (string) ($connection['driver'] ?? '-'),
+                'database' => (string) ($connection['database'] ?? '-'),
+                'table_count' => $this->databaseTableCount(),
+            ],
+            'latestBackup' => $latestBackup,
+        ]);
+    }
+
+    public function backupDatabase()
+    {
+        $guard = $this->guardSuperadminDatabaseAction();
+
+        if ($guard instanceof RedirectResponse) {
+            return $guard;
+        }
+
+        try {
+            $backupPath = storage_path('app/database-backups');
+
+            if (! is_dir($backupPath)) {
+                mkdir($backupPath, 0775, true);
+            }
+
+            $filename = 'infrasph_backup_'.now()->format('Ymd_His').'.sql';
+            $path = $backupPath.DIRECTORY_SEPARATOR.$filename;
+
+            file_put_contents($path, $this->buildDatabaseSqlDump());
+
+            return response()->download($path, $filename, [
+                'Content-Type' => 'application/sql; charset=UTF-8',
+            ]);
+        } catch (\Throwable $exception) {
+            return redirect()
+                ->route('superadmin.database')
+                ->with('error', 'Backup database gagal: '.$exception->getMessage());
+        }
+    }
+
+    public function resetDatabase(Request $request): RedirectResponse
+    {
+        $guard = $this->guardSuperadminDatabaseAction();
+
+        if ($guard instanceof RedirectResponse) {
+            return $guard;
+        }
+
+        $request->validate([
+            'confirmation' => ['required', 'in:RESET DATABASE'],
+        ], [
+            'confirmation.in' => 'Ketik RESET DATABASE untuk menjalankan reset.',
+        ]);
+
+        try {
+            Artisan::call('migrate:fresh', [
+                '--seed' => true,
+                '--force' => true,
+            ]);
+
+            return redirect()
+                ->route('superadmin.database')
+                ->with('success', 'Database berhasil direset dan seeder berhasil dijalankan ulang.');
+        } catch (\Throwable $exception) {
+            return redirect()
+                ->route('superadmin.database')
+                ->with('error', 'Reset database gagal: '.$exception->getMessage());
+        }
+    }
+
+    public function importDatabase(Request $request): RedirectResponse
+    {
+        $guard = $this->guardSuperadminDatabaseAction();
+
+        if ($guard instanceof RedirectResponse) {
+            return $guard;
+        }
+
+        $request->validate([
+            'database_file' => ['required', 'file', 'mimes:sql,txt', 'max:51200'],
+            'confirmation' => ['required', 'in:IMPORT DATABASE'],
+        ], [
+            'database_file.required' => 'Pilih file SQL yang ingin diimpor.',
+            'confirmation.in' => 'Ketik IMPORT DATABASE untuk menjalankan impor.',
+        ]);
+
+        try {
+            $sql = file_get_contents($request->file('database_file')->getRealPath());
+
+            if (! is_string($sql) || trim($sql) === '') {
+                return redirect()
+                    ->route('superadmin.database')
+                    ->with('error', 'File SQL kosong atau tidak bisa dibaca.');
+            }
+
+            DB::unprepared($sql);
+
+            return redirect()
+                ->route('superadmin.database')
+                ->with('success', 'File SQL berhasil diimpor ke database.');
+        } catch (\Throwable $exception) {
+            return redirect()
+                ->route('superadmin.database')
+                ->with('error', 'Impor database gagal: '.$exception->getMessage());
+        }
+    }
+
     public function updateHakAkses(Request $request): RedirectResponse
     {
         if (! session('logged_in')) {
@@ -3310,8 +3463,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 3) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         if (Schema::hasTable('hak_akses_menu')) {
@@ -3341,11 +3494,12 @@ class Control extends Controller
         $user = (array) session('user');
         $level = (int) ($user['level'] ?? 0);
 
-        if ($level !== 1) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
-        $assignment = $this->getActiveAssignmentsForUser($user)->sortByDesc('id_penugasan_ruangan')->first();
+        $assignment = $this->getActiveAssignmentsForUser($user)->sortByDesc('id_penugasan_ruangan')->first()
+            ?? ($level === 3 ? $this->fallbackRequestAssignmentForSuperadmin() : null);
 
         if (! $assignment) {
             return redirect()->route('dashboard')->with('error', 'Akunmu belum memiliki kelas aktif untuk mengajukan permintaan.');
@@ -3390,11 +3544,12 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 1) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
-        $assignment = $this->getActiveAssignmentsForUser($user)->sortByDesc('id_penugasan_ruangan')->first();
+        $assignment = $this->getActiveAssignmentsForUser($user)->sortByDesc('id_penugasan_ruangan')->first()
+            ?? ((int) ($user['level'] ?? 0) === 3 ? $this->fallbackRequestAssignmentForSuperadmin() : null);
 
         if (! $assignment) {
             return redirect()->route('dashboard')->with('error', 'Akunmu belum memiliki kelas aktif untuk mengajukan permintaan.');
@@ -3490,8 +3645,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 1) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
@@ -3596,8 +3751,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 2) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
@@ -3678,8 +3833,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 2) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
@@ -3780,8 +3935,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 2) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $ownedRequest = $this->findAdminOwnedRequest($user, $requestId);
@@ -3824,8 +3979,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 2) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $ownedRequest = $this->findAdminOwnedRequest($user, $requestId);
@@ -3875,12 +4030,12 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 4) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $status = strtolower(trim((string) $request->query('status', 'menunggu')));
+        $status = strtolower($this->queryString($request, 'status', 'menunggu'));
 
         if (! in_array($status, ['menunggu', 'disetujui', 'ditolak'], true)) {
             $status = 'menunggu';
@@ -4017,8 +4172,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 4) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $ownedRequest = $this->findOwnerApprovalRequest($requestId);
@@ -4061,8 +4216,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 4) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $ownedRequest = $this->findOwnerApprovalRequest($requestId);
@@ -4112,14 +4267,14 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 4) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $dashboard = $this->resolveDashboardData($user);
-        $section = strtolower(trim((string) $request->query('section', 'inventory')));
-        $month = max(1, min(12, (int) $request->query('month', (int) now()->format('m'))));
-        $year = max(2024, (int) $request->query('year', (int) now()->format('Y')));
+        $section = strtolower($this->queryString($request, 'section', 'inventory'));
+        $month = max(1, min(12, (int) $this->queryString($request, 'month', now()->format('m'))));
+        $year = max(2024, (int) $this->queryString($request, 'year', now()->format('Y')));
 
         if (! in_array($section, ['inventory', 'requests', 'classes'], true)) {
             $section = 'inventory';
@@ -4151,14 +4306,14 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 4) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
-        $section = strtolower(trim((string) $request->query('section', 'inventory')));
-        $format = strtolower(trim((string) $request->query('format', 'excel')));
-        $month = max(1, min(12, (int) $request->query('month', (int) now()->format('m'))));
-        $year = max(2024, (int) $request->query('year', (int) now()->format('Y')));
+        $section = strtolower($this->queryString($request, 'section', 'inventory'));
+        $format = strtolower($this->queryString($request, 'format', 'excel'));
+        $month = max(1, min(12, (int) $this->queryString($request, 'month', now()->format('m'))));
+        $year = max(2024, (int) $this->queryString($request, 'year', now()->format('Y')));
 
         if (! in_array($section, ['inventory', 'requests', 'classes'], true)) {
             $section = 'inventory';
@@ -4256,8 +4411,8 @@ class Control extends Controller
 
         $user = (array) session('user');
 
-        if ((int) ($user['level'] ?? 0) !== 1) {
-            return redirect()->route('dashboard');
+        if ($guard = $this->guardRouteAccess((string) request()->route()?->getName())) {
+            return $guard;
         }
 
         $ownedRequest = DB::table('permintaan')
@@ -5211,9 +5366,9 @@ class Control extends Controller
     private function buildSuperadminUserRedirectFilters(Request $request): array
     {
         return [
-            'q' => trim((string) $request->input('q', $request->query('q', ''))),
-            'role' => trim((string) $request->input('role_filter', $request->query('role', 'semua'))),
-            'room_type' => trim((string) $request->input('room_type_filter', $request->query('room_type', 'semua'))),
+            'q' => $this->inputString($request, 'q'),
+            'role' => $this->inputString($request, 'role_filter', $this->queryString($request, 'role', 'semua')),
+            'room_type' => $this->inputString($request, 'room_type_filter', $this->queryString($request, 'room_type', 'semua')),
         ];
     }
 
@@ -5223,9 +5378,9 @@ class Control extends Controller
     private function buildSuperadminRoomRedirectFilters(Request $request): array
     {
         return [
-            'q' => trim((string) $request->input('q', $request->query('q', ''))),
-            'type' => trim((string) $request->input('type_filter', $request->query('type', 'semua'))),
-            'unit' => trim((string) $request->input('unit_filter', $request->query('unit', 'semua'))),
+            'q' => $this->inputString($request, 'q'),
+            'type' => $this->inputString($request, 'type_filter', $this->queryString($request, 'type', 'semua')),
+            'unit' => $this->inputString($request, 'unit_filter', $this->queryString($request, 'unit', 'semua')),
         ];
     }
 
@@ -5235,11 +5390,11 @@ class Control extends Controller
     private function buildSuperadminItemRedirectFilters(Request $request): array
     {
         return [
-            'q' => trim((string) $request->input('q', $request->query('q', ''))),
-            'category' => trim((string) $request->input('category_filter', $request->query('category', 'semua'))),
-            'room' => trim((string) $request->input('room_filter', $request->query('room', 'semua'))),
-            'room_type' => trim((string) $request->input('room_type_filter', $request->query('room_type', 'semua'))),
-            'condition' => trim((string) $request->input('condition_filter', $request->query('condition', 'semua'))),
+            'q' => $this->inputString($request, 'q'),
+            'category' => $this->inputString($request, 'category_filter', $this->queryString($request, 'category', 'semua')),
+            'room' => $this->inputString($request, 'room_filter', $this->queryString($request, 'room', 'semua')),
+            'room_type' => $this->inputString($request, 'room_type_filter', $this->queryString($request, 'room_type', 'semua')),
+            'condition' => $this->inputString($request, 'condition_filter', $this->queryString($request, 'condition', 'semua')),
         ];
     }
 
@@ -5298,11 +5453,192 @@ class Control extends Controller
     private function buildSuperadminRealizationRedirectFilters(Request $request): array
     {
         return [
-            'status' => trim((string) $request->input('status_filter', $request->query('status', 'menunggu'))),
-            'room' => trim((string) $request->input('room_filter', $request->query('room', 'semua'))),
-            'date' => trim((string) $request->input('date_filter', $request->query('date', ''))),
-            'q' => trim((string) $request->input('q', $request->query('q', ''))),
+            'status' => $this->inputString($request, 'status_filter', $this->queryString($request, 'status', 'menunggu')),
+            'room' => $this->inputString($request, 'room_filter', $this->queryString($request, 'room', 'semua')),
+            'date' => $this->inputString($request, 'date_filter', $this->queryString($request, 'date')),
+            'q' => $this->inputString($request, 'q'),
         ];
+    }
+
+    private function guardSuperadminDatabaseAction(): ?RedirectResponse
+    {
+        if (! session('logged_in')) {
+            return redirect()->route('login');
+        }
+
+        return $this->guardRouteAccess('superadmin.database');
+    }
+
+    private function guardRouteAccess(string $routeName): ?RedirectResponse
+    {
+        $menuKey = self::ROUTE_MENU_MAP[$routeName] ?? null;
+
+        if ($menuKey === null) {
+            return null;
+        }
+
+        $user = (array) session('user');
+        $level = (int) ($user['level'] ?? 0);
+
+        if ($level > 0 && ! app(MenuAccessService::class)->userCanAccessMenu($level, $menuKey)) {
+            return redirect()->route('dashboard');
+        }
+
+        return null;
+    }
+
+    private function fallbackRequestAssignmentForSuperadmin(): ?object
+    {
+        $room = DB::table('ruangan')
+            ->orderBy('id_ruangan')
+            ->first(['id_ruangan', 'nama_ruangan', 'kode_ruangan', 'jenis_ruangan']);
+
+        if (! $room) {
+            return null;
+        }
+
+        return (object) [
+            'id_penugasan_ruangan' => 0,
+            'id_ruangan' => (int) $room->id_ruangan,
+            'nama_ruangan' => (string) $room->nama_ruangan,
+            'kode_ruangan' => (string) $room->kode_ruangan,
+            'jenis_ruangan' => (string) $room->jenis_ruangan,
+            'peran_ruangan' => 'superadmin',
+            'status' => 'aktif',
+        ];
+    }
+
+    private function databaseTableCount(): int
+    {
+        try {
+            return count($this->databaseTableNames());
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function databaseTableNames(): array
+    {
+        $driver = DB::connection()->getDriverName();
+
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            return collect(DB::select("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'"))
+                ->map(fn (object $row) => (string) array_values((array) $row)[0])
+                ->values()
+                ->all();
+        }
+
+        if ($driver === 'sqlite') {
+            return collect(DB::select("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"))
+                ->map(fn (object $row) => (string) $row->name)
+                ->values()
+                ->all();
+        }
+
+        return [];
+    }
+
+    private function buildDatabaseSqlDump(): string
+    {
+        $driver = DB::connection()->getDriverName();
+        $tables = $this->databaseTableNames();
+        $lines = [
+            '-- InfraSPH database backup',
+            '-- Generated at '.now()->toDateTimeString(),
+            '-- Connection driver: '.$driver,
+            '',
+        ];
+
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            $lines[] = 'SET FOREIGN_KEY_CHECKS=0;';
+            $lines[] = '';
+        } elseif ($driver === 'sqlite') {
+            $lines[] = 'PRAGMA foreign_keys=OFF;';
+            $lines[] = '';
+        }
+
+        foreach ($tables as $table) {
+            $lines[] = '-- Table: '.$table;
+            $lines[] = $this->dropTableSql($table, $driver);
+            $lines[] = $this->createTableSql($table, $driver);
+            $lines[] = '';
+
+            foreach (DB::table($table)->get() as $row) {
+                $lines[] = $this->insertRowSql($table, (array) $row, $driver);
+            }
+
+            $lines[] = '';
+        }
+
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            $lines[] = 'SET FOREIGN_KEY_CHECKS=1;';
+        } elseif ($driver === 'sqlite') {
+            $lines[] = 'PRAGMA foreign_keys=ON;';
+        }
+
+        return implode(PHP_EOL, $lines).PHP_EOL;
+    }
+
+    private function dropTableSql(string $table, string $driver): string
+    {
+        return 'DROP TABLE IF EXISTS '.$this->quoteIdentifier($table, $driver).';';
+    }
+
+    private function createTableSql(string $table, string $driver): string
+    {
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            $row = (array) DB::selectOne('SHOW CREATE TABLE '.$this->quoteIdentifier($table, $driver));
+
+            return (string) ($row['Create Table'] ?? array_values($row)[1] ?? '').';';
+        }
+
+        if ($driver === 'sqlite') {
+            $row = DB::selectOne("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", [$table]);
+
+            return (string) ($row->sql ?? '').';';
+        }
+
+        throw new \RuntimeException('Backup SQL belum mendukung driver database '.$driver.'.');
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function insertRowSql(string $table, array $row, string $driver): string
+    {
+        $columns = collect(array_keys($row))
+            ->map(fn (string $column) => $this->quoteIdentifier($column, $driver))
+            ->implode(', ');
+        $values = collect(array_values($row))
+            ->map(fn (mixed $value) => $this->quoteSqlValue($value))
+            ->implode(', ');
+
+        return 'INSERT INTO '.$this->quoteIdentifier($table, $driver).' ('.$columns.') VALUES ('.$values.');';
+    }
+
+    private function quoteIdentifier(string $identifier, string $driver): string
+    {
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            return '`'.str_replace('`', '``', $identifier).'`';
+        }
+
+        return '"'.str_replace('"', '""', $identifier).'"';
+    }
+
+    private function quoteSqlValue(mixed $value): string
+    {
+        if ($value === null) {
+            return 'NULL';
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        return DB::connection()->getPdo()->quote((string) $value);
     }
 
     private function resolveLoginUser(string $login): ?User
@@ -5344,6 +5680,10 @@ class Control extends Controller
             throw new \RuntimeException('User email is empty.');
         }
 
+        if (! $this->mailLoginOtpReady()) {
+            throw new \RuntimeException('Mailer SMTP belum lengkap. Periksa MAIL_MAILER, MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, dan MAIL_FROM_ADDRESS.');
+        }
+
         $recentOtpCount = DB::table('login_otps')
             ->where('email', $email)
             ->where('purpose', 'login')
@@ -5378,17 +5718,30 @@ class Control extends Controller
             'updated_at' => $now,
         ]);
 
-        Mail::send(
-            'emails.login_otp',
-            [
-                'appUrl' => parse_url((string) config('app.url'), PHP_URL_HOST) ?: config('app.name', 'InfraSPH'),
-                'name' => $user->nama,
-                'otp' => $otp,
-            ],
-            function ($message) use ($email) {
-                $message->to($email)->subject('Kode OTP Login InfraSPH');
-            }
-        );
+        try {
+            Mail::send(
+                'emails.login_otp',
+                [
+                    'appUrl' => parse_url((string) config('app.url'), PHP_URL_HOST) ?: config('app.name', 'InfraSPH'),
+                    'name' => $user->nama,
+                    'otp' => $otp,
+                ],
+                function ($message) use ($email) {
+                    $message->to($email)->subject('Kode OTP Login InfraSPH');
+                }
+            );
+        } catch (\Throwable $exception) {
+            Log::warning('Login OTP email failed to send.', [
+                'email' => $email,
+                'mailer' => config('mail.default'),
+                'host' => config('mail.mailers.smtp.host'),
+                'port' => config('mail.mailers.smtp.port'),
+                'from' => config('mail.from.address'),
+                'message' => $exception->getMessage(),
+            ]);
+
+            throw new \RuntimeException('OTP gagal dikirim oleh server email. Periksa konfigurasi SMTP hosting.');
+        }
 
         $request->session()->put('otp_login_email', $email);
         $request->session()->put('otp_login_expires_at', $expiresAt->toIso8601String());
@@ -5430,9 +5783,40 @@ class Control extends Controller
 
         $clientId = trim((string) config('services.google.client_id'));
         $clientSecret = trim((string) config('services.google.client_secret'));
-        $redirect = trim((string) config('services.google.redirect'));
 
-        return $clientId !== '' && $clientSecret !== '' && $redirect !== '';
+        return $clientId !== '' && $clientSecret !== '';
+    }
+
+    private function googleRedirectUri(): string
+    {
+        $configuredRedirect = trim((string) config('services.google.redirect'));
+
+        if ($configuredRedirect !== '') {
+            return $configuredRedirect;
+        }
+
+        return route('login.google.callback');
+    }
+
+    private function mailLoginOtpReady(): bool
+    {
+        if ((string) config('mail.default') !== 'smtp') {
+            return true;
+        }
+
+        foreach ([
+            config('mail.mailers.smtp.host'),
+            config('mail.mailers.smtp.port'),
+            config('mail.mailers.smtp.username'),
+            config('mail.mailers.smtp.password'),
+            config('mail.from.address'),
+        ] as $value) {
+            if (trim((string) $value) === '') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -5516,6 +5900,41 @@ class Control extends Controller
         $trimmed = trim((string) ($value ?? ''));
 
         return $trimmed !== '' ? $trimmed : null;
+    }
+
+    private function queryString(Request $request, string $key, string $default = ''): string
+    {
+        return $this->requestStringValue($request->query($key, $default), $default);
+    }
+
+    private function inputString(Request $request, string $key, string $default = ''): string
+    {
+        return $this->requestStringValue($request->input($key, $default), $default);
+    }
+
+    private function requestStringValue(mixed $value, string $default = ''): string
+    {
+        while (is_array($value)) {
+            if ($value === []) {
+                return trim($default);
+            }
+
+            $value = reset($value);
+        }
+
+        if ($value === null) {
+            return trim($default);
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        if (is_scalar($value) || $value instanceof \Stringable) {
+            return trim((string) $value);
+        }
+
+        return trim($default);
     }
 
     /**

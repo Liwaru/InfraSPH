@@ -75,6 +75,7 @@ class LoginMethodsTest extends TestCase
         Config::set('services.google.redirect', 'http://127.0.0.1:8000/auth/google/callback');
 
         Socialite::shouldReceive('driver')->once()->with('google')->andReturnSelf();
+        Socialite::shouldReceive('redirectUrl')->once()->with('http://127.0.0.1:8000/auth/google/callback')->andReturnSelf();
         Socialite::shouldReceive('with')->once()->with([
             'prompt' => 'select_account',
         ])->andReturnSelf();
@@ -102,6 +103,7 @@ class LoginMethodsTest extends TestCase
         $googleUser->shouldReceive('getAvatar')->once()->andReturn('https://example.test/avatar.png');
 
         $provider = Mockery::mock();
+        $provider->shouldReceive('redirectUrl')->once()->with('http://127.0.0.1:8000/auth/google/callback')->andReturnSelf();
         $provider->shouldReceive('stateless')->once()->andReturnSelf();
         $provider->shouldReceive('user')->once()->andReturn($googleUser);
 

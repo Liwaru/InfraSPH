@@ -81,6 +81,12 @@ class MenuAccessService
             'route' => 'hak_akses.index',
             'default_levels' => [3],
         ],
+        'database_tools' => [
+            'label' => 'Database',
+            'icon' => 'bi bi-database-fill-gear',
+            'route' => 'superadmin.database',
+            'default_levels' => [3],
+        ],
         'laporan_superadmin' => [
             'label' => 'Laporan (Superadmin)',
             'icon' => 'bi bi-bar-chart-line-fill',
@@ -158,6 +164,7 @@ class MenuAccessService
         }
 
         $matrix[3]['hak_akses'] = true;
+        $matrix[3]['database_tools'] = true;
 
         return $matrix;
     }
@@ -196,12 +203,27 @@ class MenuAccessService
         }
 
         $matrix[3]['hak_akses'] = true;
+        $matrix[3]['database_tools'] = true;
 
         return $matrix;
     }
 
     public function sidebarMenusForLevel(int $level): array
     {
+        if ($level === 3) {
+            return collect(self::MENU_DEFINITIONS)
+                ->map(function (array $definition, string $menuKey) {
+                    return [
+                        'key' => $menuKey,
+                        'label' => $this->sidebarLabel($menuKey),
+                        'icon' => $definition['icon'],
+                        'route' => $definition['route'],
+                    ];
+                })
+                ->values()
+                ->all();
+        }
+
         $permissions = $this->permissionMatrix();
         $menus = [];
 
@@ -237,7 +259,15 @@ class MenuAccessService
             return true;
         }
 
+        if ($level === 3 && array_key_exists($menuKey, self::MENU_DEFINITIONS)) {
+            return true;
+        }
+
         if ($level === 3 && $menuKey === 'hak_akses') {
+            return true;
+        }
+
+        if ($level === 3 && $menuKey === 'database_tools') {
             return true;
         }
 
@@ -264,8 +294,16 @@ class MenuAccessService
                 ->values()
                 ->all();
 
+            if ($levelId === 3) {
+                $selectedMenus = array_values(array_unique(array_merge($selectedMenus, array_keys(self::MENU_DEFINITIONS))));
+            }
+
             if ($levelId === 3 && ! in_array('hak_akses', $selectedMenus, true)) {
                 $selectedMenus[] = 'hak_akses';
+            }
+
+            if ($levelId === 3 && ! in_array('database_tools', $selectedMenus, true)) {
+                $selectedMenus[] = 'database_tools';
             }
 
             foreach ($selectedMenus as $menuKey) {

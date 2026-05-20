@@ -7,552 +7,7 @@
     <title>Inventaris Sekolah | InfraSPH</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        :root {
-            --brand-orange: #ff5900;
-            --text-dark: #1f2937;
-            --page-bg: #fff8f4;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            min-height: 100vh;
-            font-family: 'Inter', sans-serif;
-            background: var(--page-bg);
-            color: var(--text-dark);
-        }
-
-        .owner-inventory-page {
-            margin-left: 320px;
-            min-height: 100vh;
-            padding: 2rem 1.6rem 2.5rem;
-            width: calc(100% - 320px);
-            transition: margin-left 0.28s ease, width 0.28s ease, padding 0.28s ease;
-        }
-
-        .app-shell.sidebar-collapsed .owner-inventory-page {
-            margin-left: 88px;
-            width: calc(100% - 88px);
-        }
-
-        .page-shell { width: 100%; }
-
-        .hero-card,
-        .summary-card,
-        .filter-card,
-        .table-card,
-        .empty-card {
-            background: #ffffff;
-            border: 1px solid #f3e3db;
-            border-radius: 28px;
-            box-shadow: 0 18px 38px -28px rgba(31, 41, 55, 0.24);
-        }
-
-        .hero-card {
-            padding: 1.6rem 1.7rem;
-            margin-bottom: 1.4rem;
-            background: linear-gradient(135deg, rgba(255, 89, 0, 0.08), rgba(255, 89, 0, 0.02));
-        }
-
-        .eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            padding: 0.45rem 0.8rem;
-            border-radius: 999px;
-            background: rgba(255, 89, 0, 0.12);
-            color: var(--brand-orange);
-            font-size: 0.82rem;
-            font-weight: 700;
-            margin-bottom: 0.95rem;
-        }
-
-        .hero-title {
-            font-size: clamp(1.9rem, 2.8vw, 2.6rem);
-            color: var(--brand-orange);
-            margin-bottom: 0.7rem;
-            letter-spacing: -0.04em;
-        }
-
-        .hero-subtitle {
-            color: #5b6472;
-            line-height: 1.7;
-            max-width: 900px;
-        }
-
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.95rem;
-            margin-bottom: 1.2rem;
-        }
-
-        .summary-card {
-            padding: 1.05rem 1.1rem;
-            border-radius: 22px;
-        }
-
-        .summary-card.is-accent {
-            background: linear-gradient(135deg, #ff6a17, #ff5900);
-            border-color: transparent;
-        }
-
-        .summary-label {
-            color: #6b7280;
-            font-size: 0.84rem;
-            font-weight: 700;
-            margin-bottom: 0.35rem;
-        }
-
-        .summary-value {
-            color: #172033;
-            font-size: 1.75rem;
-            font-weight: 800;
-            letter-spacing: -0.04em;
-        }
-
-        .summary-note {
-            color: #7b8794;
-            font-size: 0.84rem;
-            margin-top: 0.3rem;
-            line-height: 1.5;
-        }
-
-        .summary-card.is-accent .summary-label,
-        .summary-card.is-accent .summary-value,
-        .summary-card.is-accent .summary-note {
-            color: #fffaf6;
-        }
-
-        .filter-card {
-            padding: 1rem 1.05rem;
-            margin-bottom: 1.2rem;
-        }
-
-        .filter-form {
-            display: grid;
-            grid-template-columns: minmax(0, 1.7fr) minmax(240px, 0.9fr) auto;
-            gap: 0.9rem;
-            align-items: end;
-        }
-
-        .filter-field label {
-            display: block;
-            color: #6b7280;
-            font-size: 0.8rem;
-            font-weight: 700;
-            margin-bottom: 0.45rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-        }
-
-        .filter-field input,
-        .filter-field select {
-            width: 100%;
-            border: 1px solid #ecd8cb;
-            border-radius: 16px;
-            padding: 0.92rem 1rem;
-            font: inherit;
-            font-size: 0.94rem;
-            color: #172033;
-            background: #fffdfa;
-            outline: none;
-        }
-
-        .filter-actions {
-            display: flex;
-            gap: 0.7rem;
-            flex-wrap: wrap;
-        }
-
-        .filter-btn,
-        .filter-link {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            min-width: 116px;
-            border-radius: 16px;
-            padding: 0.9rem 1rem;
-            font-size: 0.9rem;
-            font-weight: 700;
-            text-decoration: none;
-            cursor: pointer;
-        }
-
-        .filter-btn {
-            border: none;
-            background: linear-gradient(135deg, #ff5900, #ff7b2f);
-            color: #ffffff;
-        }
-
-        .filter-link {
-            border: 1px solid #ecd8cb;
-            background: #fffdfa;
-            color: #4b5563;
-        }
-
-        .table-card {
-            overflow: hidden;
-        }
-
-        .table-wrap {
-            width: 100%;
-            overflow-x: hidden;
-        }
-
-        .inventory-table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 0;
-            table-layout: fixed;
-        }
-
-        .inventory-table th,
-        .inventory-table td {
-            padding: 1rem 1.05rem;
-            text-align: left;
-            border-bottom: 1px solid #f3e3db;
-            vertical-align: top;
-            overflow-wrap: anywhere;
-            word-break: break-word;
-        }
-
-        .inventory-table th {
-            color: #6b7280;
-            font-size: 0.8rem;
-            font-weight: 800;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            background: #fff8f4;
-        }
-
-        .inventory-table tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        .inventory-name {
-            color: #172033;
-            font-size: 1rem;
-            font-weight: 800;
-            margin-bottom: 0.2rem;
-        }
-
-        .inventory-unit {
-            color: #7b8794;
-            font-size: 0.85rem;
-        }
-
-        .inventory-number {
-            color: #172033;
-            font-weight: 800;
-        }
-
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            padding: 0.45rem 0.7rem;
-            border-radius: 999px;
-            font-size: 0.78rem;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
-        .status-badge.good {
-            background: #eaf8ef;
-            color: #15803d;
-        }
-
-        .status-badge.warning {
-            background: #fff0eb;
-            color: #c2410c;
-        }
-
-        .detail-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.45rem;
-            border: 1px solid #ecd8cb;
-            border-radius: 14px;
-            padding: 0.72rem 0.9rem;
-            background: #ffffff;
-            color: #ff5900;
-            font-size: 0.88rem;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .detail-btn:hover {
-            background: #fff8f4;
-            border-color: rgba(255, 89, 0, 0.3);
-        }
-
-        .empty-card {
-            padding: 1.25rem 1.35rem;
-            color: #667085;
-            line-height: 1.65;
-        }
-
-        .pagination-wrap {
-            margin-top: 1.25rem;
-            display: flex;
-            justify-content: center;
-        }
-
-        .pagination {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-
-        .pagination-info {
-            color: #6b7280;
-            font-size: 0.88rem;
-            margin-right: 0.35rem;
-        }
-
-        .pagination-link,
-        .pagination-current {
-            min-width: 42px;
-            height: 42px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 14px;
-            border: 1px solid #ecd8cb;
-            background: #ffffff;
-            color: #4b5563;
-            font-size: 0.9rem;
-            font-weight: 700;
-            line-height: 1;
-            text-decoration: none;
-        }
-
-        .pagination-link:hover {
-            border-color: rgba(255, 89, 0, 0.32);
-            color: #ff5900;
-        }
-
-        .pagination-current {
-            border-color: transparent;
-            background: linear-gradient(135deg, #ff5900, #ff7b2f);
-            color: #ffffff;
-        }
-
-        .pagination-link.disabled {
-            opacity: 0.45;
-            pointer-events: none;
-        }
-
-        .inventory-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 1600;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 1.2rem;
-            background: rgba(17, 24, 39, 0.42);
-        }
-
-        .inventory-modal.open {
-            display: flex;
-        }
-
-        .inventory-modal-dialog {
-            width: min(760px, 100%);
-            max-height: calc(100vh - 2.4rem);
-            overflow-y: auto;
-            background: #ffffff;
-            border: 1px solid #f3e3db;
-            border-radius: 28px;
-            box-shadow: 0 28px 48px -28px rgba(31, 41, 55, 0.35);
-        }
-
-        .inventory-modal-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 1.25rem 1.3rem 1rem;
-            border-bottom: 1px solid #f3e3db;
-            background: linear-gradient(135deg, rgba(255, 89, 0, 0.08), rgba(255, 89, 0, 0.02));
-        }
-
-        .inventory-modal-title {
-            color: var(--brand-orange);
-            font-size: 1.45rem;
-            font-weight: 800;
-            margin-bottom: 0.25rem;
-        }
-
-        .inventory-modal-meta {
-            color: #667085;
-            font-size: 0.92rem;
-            line-height: 1.65;
-        }
-
-        .inventory-modal-close {
-            width: 42px;
-            height: 42px;
-            border: none;
-            border-radius: 14px;
-            background: rgba(255, 255, 255, 0.88);
-            color: #e14f00;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-
-        .inventory-modal-body {
-            padding: 1.15rem 1.3rem 1.25rem;
-            display: grid;
-            gap: 1rem;
-        }
-
-        .inventory-modal-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.85rem;
-        }
-
-        .inventory-modal-card {
-            padding: 0.95rem 1rem;
-            border-radius: 20px;
-            background: #fff8f4;
-            border: 1px solid #f3e3db;
-        }
-
-        .inventory-modal-label {
-            color: #6b7280;
-            font-size: 0.82rem;
-            font-weight: 700;
-            margin-bottom: 0.2rem;
-        }
-
-        .inventory-modal-value {
-            color: #172033;
-            font-size: 1.15rem;
-            font-weight: 800;
-        }
-
-        .inventory-modal-section {
-            border: 1px solid #f3e3db;
-            border-radius: 22px;
-            padding: 1rem 1.05rem;
-            background: #fffdfa;
-        }
-
-        .distribution-list {
-            display: grid;
-            gap: 0.75rem;
-        }
-
-        .distribution-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 0.9rem 0.95rem;
-            border-radius: 18px;
-            background: #fff8f4;
-            border: 1px solid #f5e3d8;
-        }
-
-        .distribution-room {
-            color: #172033;
-            font-weight: 700;
-            margin-bottom: 0.2rem;
-        }
-
-        .distribution-code {
-            color: #7b8794;
-            font-size: 0.82rem;
-        }
-
-        .distribution-stats {
-            display: flex;
-            gap: 0.9rem;
-            flex-wrap: wrap;
-            color: #4b5563;
-            font-size: 0.85rem;
-        }
-
-        .distribution-empty {
-            color: #7b8794;
-            font-size: 0.9rem;
-            line-height: 1.55;
-        }
-
-        @media (max-width: 1320px) {
-            .summary-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
-        @media (max-width: 1040px) {
-            .filter-form {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        @media (max-width: 860px) {
-            .owner-inventory-page {
-                margin-left: 0;
-                width: 100%;
-                padding: 1.2rem 1rem 2rem;
-            }
-
-            .summary-grid,
-            .inventory-modal-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .table-wrap {
-                overflow-x: auto;
-            }
-
-            .inventory-table {
-                min-width: 860px;
-                table-layout: auto;
-            }
-        }
-
-        @media (max-width: 640px) {
-            .table-wrap { overflow-x: visible; }
-            .inventory-table.mobile-card-table { min-width: 0; table-layout: auto; }
-            .inventory-table.mobile-card-table thead { display: none; }
-            .inventory-table.mobile-card-table,
-            .inventory-table.mobile-card-table tbody,
-            .inventory-table.mobile-card-table tr,
-            .inventory-table.mobile-card-table td { display: block; width: 100%; }
-            .inventory-table.mobile-card-table tr {
-                padding: 0.35rem 1rem 0.95rem;
-                border-bottom: 1px solid #f6e7df;
-            }
-            .inventory-table.mobile-card-table td {
-                display: flex;
-                justify-content: space-between;
-                gap: 1rem;
-                padding: 0.72rem 0;
-                border-bottom: 1px dashed #f6e7df;
-                text-align: right;
-            }
-            .inventory-table.mobile-card-table td:last-child { border-bottom: 0; }
-            .inventory-table.mobile-card-table td::before {
-                content: attr(data-label);
-                flex: 0 0 40%;
-                color: #7b8794;
-                font-size: 0.74rem;
-                font-weight: 800;
-                text-align: left;
-                text-transform: uppercase;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ asset('css/views/inventaris_sekolah_kepala.css') }}">
 </head>
 <body>
     <div class="app-shell" id="appShell">
@@ -618,13 +73,13 @@
                         <table class="inventory-table mobile-card-table">
                             <thead>
                                 <tr>
-                                    <th style="width: 28%;">Nama Barang</th>
-                                    <th style="width: 12%;">Total</th>
-                                    <th style="width: 12%;">Baik</th>
-                                    <th style="width: 12%;">Rusak</th>
-                                    <th style="width: 12%;">Satuan</th>
-                                    <th style="width: 12%;">Status</th>
-                                    <th style="width: 12%;">Aksi</th>
+                                    <th class="col-name">Nama Barang</th>
+                                    <th class="col-small">Total</th>
+                                    <th class="col-small">Baik</th>
+                                    <th class="col-small">Rusak</th>
+                                    <th class="col-small">Satuan</th>
+                                    <th class="col-small">Status</th>
+                                    <th class="col-small">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -724,7 +179,7 @@
                     </div>
 
                     <section class="inventory-modal-section">
-                        <div class="inventory-modal-label" style="margin-bottom: 0.7rem;">Distribusi Per Ruangan</div>
+                        <div class="inventory-modal-label distribution-title">Distribusi Per Ruangan</div>
                         <div class="distribution-list" id="inventory-modal-distribution"></div>
                     </section>
                 </div>
@@ -747,6 +202,10 @@
             const distributionEl = document.getElementById('inventory-modal-distribution');
 
             const openModal = (inventory) => {
+                titleEl.classList.add('notranslate');
+                titleEl.setAttribute('translate', 'no');
+                unitEl.classList.add('notranslate');
+                unitEl.setAttribute('translate', 'no');
                 titleEl.textContent = inventory.nama_barang;
                 metaEl.textContent = `Rekap distribusi ${inventory.nama_barang.toLowerCase()} di seluruh sekolah`;
                 totalEl.textContent = inventory.total_barang;
@@ -757,22 +216,35 @@
                 distributionEl.innerHTML = '';
 
                 if (!Array.isArray(inventory.distribution) || inventory.distribution.length === 0) {
-                    distributionEl.innerHTML = '<div class="distribution-empty">Belum ada distribusi ruangan yang tercatat untuk barang ini.</div>';
+                    const empty = document.createElement('div');
+                    empty.className = 'distribution-empty';
+                    empty.textContent = 'Belum ada distribusi ruangan yang tercatat untuk barang ini.';
+                    distributionEl.appendChild(empty);
                 } else {
                     inventory.distribution.forEach((item) => {
                         const row = document.createElement('div');
                         row.className = 'distribution-item';
-                        row.innerHTML = `
-                            <div>
-                                <div class="distribution-room">${item.ruangan}</div>
-                                <div class="distribution-code">${item.kode}</div>
-                            </div>
-                            <div class="distribution-stats">
-                                <span>Total: ${item.total}</span>
-                                <span>Baik: ${item.baik}</span>
-                                <span>Rusak: ${item.rusak}</span>
-                            </div>
-                        `;
+
+                        const roomWrap = document.createElement('div');
+                        const roomName = document.createElement('div');
+                        roomName.className = 'distribution-room notranslate';
+                        roomName.setAttribute('translate', 'no');
+                        roomName.textContent = item.ruangan || '-';
+                        const roomCode = document.createElement('div');
+                        roomCode.className = 'distribution-code notranslate';
+                        roomCode.setAttribute('translate', 'no');
+                        roomCode.textContent = item.kode || '-';
+                        roomWrap.append(roomName, roomCode);
+
+                        const stats = document.createElement('div');
+                        stats.className = 'distribution-stats';
+                        ['Total: ' + (item.total ?? 0), 'Baik: ' + (item.baik ?? 0), 'Rusak: ' + (item.rusak ?? 0)].forEach((text) => {
+                            const stat = document.createElement('span');
+                            stat.textContent = text;
+                            stats.appendChild(stat);
+                        });
+
+                        row.append(roomWrap, stats);
                         distributionEl.appendChild(row);
                     });
                 }
@@ -820,3 +292,4 @@
     </script>
 </body>
 </html>
+

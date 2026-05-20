@@ -7,86 +7,7 @@
     <title>Profil & Keamanan | InfraSPH</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        :root {
-            --brand-orange: #ff5900;
-            --brand-orange-dark: #e14f00;
-            --page-bg: #fff8f4;
-            --text-dark: #1f2937;
-            --muted: #64748b;
-            --border: #f2e7df;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { min-height: 100vh; font-family: 'Inter', sans-serif; background: var(--page-bg); color: var(--text-dark); }
-        .content-area { margin-left: 320px; min-height: 100vh; padding: 2rem 1.6rem 2.8rem; transition: margin-left 0.28s ease, width 0.28s ease; }
-        .app-shell.sidebar-collapsed .content-area { margin-left: 88px; }
-        .page-shell { display: grid; gap: 1.2rem; }
-        .hero-card {
-            background: linear-gradient(135deg, rgba(255, 89, 0, 0.1), rgba(255, 89, 0, 0.03));
-            border: 1px solid rgba(255, 89, 0, 0.12);
-            border-radius: 28px;
-            padding: 1.65rem;
-        }
-        .eyebrow { display: inline-flex; gap: 0.45rem; align-items: center; padding: 0.45rem 0.8rem; border-radius: 999px; background: rgba(255, 89, 0, 0.12); color: var(--brand-orange); font-size: 0.82rem; font-weight: 800; margin-bottom: 0.95rem; }
-        .hero-title { font-size: clamp(1.7rem, 2.8vw, 2.45rem); color: var(--brand-orange); line-height: 1.1; margin-bottom: 0.6rem; }
-        .hero-subtitle { color: #5b6472; line-height: 1.7; max-width: 760px; }
-        .alert { border-radius: 18px; padding: 0.95rem 1rem; border: 1px solid; font-weight: 700; }
-        .alert.success { background: #ecfdf3; border-color: #bbf7d0; color: #166534; }
-        .alert.error { background: #fff1f0; border-color: #fecaca; color: #b91c1c; }
-        .profile-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr); gap: 1.2rem; align-items: start; }
-        .panel-card { background: #fff; border: 1px solid var(--border); border-radius: 24px; padding: 1.25rem; box-shadow: 0 18px 38px -28px rgba(31, 41, 55, 0.24); }
-        .panel-title { color: var(--brand-orange); font-size: 1.06rem; font-weight: 800; margin-bottom: 0.85rem; }
-        .panel-copy { color: var(--muted); line-height: 1.65; font-size: 0.92rem; margin-bottom: 1rem; }
-        .field-grid { display: grid; gap: 0.95rem; }
-        .field-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        label { display: block; font-size: 0.84rem; color: #334155; font-weight: 800; margin-bottom: 0.45rem; }
-        input {
-            width: 100%;
-            border: 1px solid #eadbd2;
-            border-radius: 15px;
-            padding: 0.82rem 0.9rem;
-            font: inherit;
-            color: var(--text-dark);
-            outline: none;
-            background: #fff;
-        }
-        input[readonly] { background: #fff8f4; color: #64748b; }
-        input:focus { border-color: rgba(255, 89, 0, 0.72); box-shadow: 0 0 0 3px rgba(255, 89, 0, 0.13); }
-        .btn {
-            border: 0;
-            border-radius: 16px;
-            background: linear-gradient(100deg, #f97316, #fd7010);
-            color: #fff;
-            padding: 0.85rem 1rem;
-            font: inherit;
-            font-weight: 800;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            text-decoration: none;
-        }
-        .btn.secondary { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
-        .form-actions { margin-top: 1rem; display: flex; gap: 0.7rem; flex-wrap: wrap; }
-        .readonly-list { display: grid; gap: 0.75rem; }
-        .readonly-item { border: 1px solid #f1ddd1; border-radius: 18px; padding: 0.95rem; background: #fffaf7; }
-        .readonly-label { color: var(--muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; margin-bottom: 0.35rem; }
-        .readonly-value { font-weight: 800; overflow-wrap: anywhere; }
-        .assignment-list { display: grid; gap: 0.75rem; }
-        .assignment-item { border: 1px solid #f1ddd1; border-radius: 18px; padding: 0.95rem; display: grid; gap: 0.35rem; }
-        .assignment-name { font-weight: 800; color: #1f2937; }
-        .assignment-meta { color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
-        .status-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border-radius: 18px; background: #fff8f4; border: 1px solid #f1ddd1; }
-        .badge { border-radius: 999px; padding: 0.4rem 0.7rem; font-weight: 800; font-size: 0.8rem; white-space: nowrap; }
-        .badge.on { background: #dcfce7; color: #166534; }
-        .badge.off { background: #f1f5f9; color: #475569; }
-        .switch-line { display: flex; align-items: center; gap: 0.65rem; margin-top: 1rem; color: #334155; font-weight: 800; }
-        .switch-line input { width: 20px; height: 20px; }
-        @media (max-width: 980px) { .profile-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 860px) { .content-area { margin-left: 0; padding: 1.2rem 1rem 2rem; } .app-shell.sidebar-collapsed .content-area { margin-left: 0; } }
-        @media (max-width: 640px) { .field-grid.two { grid-template-columns: 1fr; } .hero-card, .panel-card { border-radius: 20px; padding: 1.1rem; } }
-    </style>
+    <link rel="stylesheet" href="{{ asset('css/views/profile_security.css') }}">
 </head>
 <body>
 <div class="app-shell" id="appShell">
@@ -201,7 +122,7 @@
                     <div class="status-row">
                         <div>
                             <strong>Verifikasi Dua Langkah (OTP)</strong>
-                            <div class="panel-copy" style="margin: 0.35rem 0 0;">Kode OTP dikirim ke email akun saat login.</div>
+                            <div class="panel-copy otp-copy">Kode OTP dikirim ke email akun saat login.</div>
                         </div>
                         <span class="badge {{ ($user['otp_enabled'] ?? false) ? 'on' : 'off' }}">
                             {{ ($user['otp_enabled'] ?? false) ? 'Aktif' : 'Tidak Aktif' }}
@@ -229,3 +150,4 @@
 </div>
 </body>
 </html>
+

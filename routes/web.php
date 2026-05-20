@@ -51,6 +51,20 @@ Route::get('/superadmin/laporan', [Control::class, 'superadminReports'])->name('
 Route::get('/superadmin/laporan/export', [Control::class, 'superadminReportsExport'])->name('superadmin.reports.export');
 Route::get('/superadmin/hak-akses', [Control::class, 'hakAkses'])->name('hak_akses.index');
 Route::post('/superadmin/hak-akses', [Control::class, 'updateHakAkses'])->name('hak_akses.update');
+Route::get('/superadmin/database', [Control::class, 'databaseTools'])->name('superadmin.database');
+Route::post('/superadmin/database/backup', [Control::class, 'backupDatabase'])->name('superadmin.database.backup');
+Route::post('/superadmin/database/reset', [Control::class, 'resetDatabase'])->name('superadmin.database.reset');
+Route::post('/superadmin/database/import', [Control::class, 'importDatabase'])->name('superadmin.database.import');
+Route::get('/superadmin/chatbot', function () {
+    $user = (array) session('user', []);
+
+    return view('superadmin_chatbot', [
+        'user' => $user,
+        'dashboard' => [
+            'role_name' => $user['role_label'] ?? 'Superadmin',
+        ],
+    ]);
+})->name('superadmin.chatbot');
 
 Route::prefix('auth')->group(function () {
     Route::get('/login', [Control::class, 'showLoginForm'])->name('login');
