@@ -29,10 +29,10 @@
             </div>
         @endif
 
-        @if ($errors->has('login') || $errors->has('password_login'))
+        @if ($errors->has('login') || $errors->has('password_login') || $errors->has('google'))
             <div class="alert-message alert-error">
                 <i class="fas fa-exclamation-triangle"></i>
-                <span>{{ $errors->first('login') ?: $errors->first('password_login') }}</span>
+                <span>{{ $errors->first('login') ?: ($errors->first('password_login') ?: $errors->first('google')) }}</span>
                 <button type="button" class="alert-close" aria-label="Tutup notifikasi">
                     <i class="fas fa-times"></i>
                 </button>
@@ -101,12 +101,19 @@
                     <span>Masuk dengan OTP Email</span>
                 </button>
             </form>
-            <form action="{{ route('login.google.redirect') }}" method="GET" class="method-form">
-                <button type="submit" class="method-link google-method" title="Login dengan Akun Google" aria-label="Login dengan Akun Google">
+            @if ($googleLoginReady)
+                <form action="{{ route('login.google.redirect') }}" method="GET" class="method-form">
+                    <button type="submit" class="method-link google-method" title="Login dengan Akun Google" aria-label="Login dengan Akun Google">
+                        <i class="fab fa-google"></i>
+                        <span>Login dengan Akun Google</span>
+                    </button>
+                </form>
+            @else
+                <button type="button" class="method-link google-method" disabled title="Google login belum dikonfigurasi" aria-label="Google login belum dikonfigurasi">
                     <i class="fab fa-google"></i>
                     <span>Login dengan Akun Google</span>
                 </button>
-            </form>
+            @endif
         </div>
 
     </div>

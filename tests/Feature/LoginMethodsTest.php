@@ -18,11 +18,27 @@ class LoginMethodsTest extends TestCase
 
     public function test_login_page_still_exposes_otp_and_google_actions(): void
     {
+        Config::set('services.google.client_id', 'test-client');
+        Config::set('services.google.client_secret', 'test-secret');
+
         $response = $this->get(route('login'));
 
         $response->assertOk();
         $response->assertSee('action="'.route('login.otp.email').'"', false);
         $response->assertSee('action="'.route('login.google.redirect').'"', false);
+    }
+
+    public function test_login_page_shows_google_configuration_error(): void
+    {
+        Config::set('services.google.client_id', '');
+        Config::set('services.google.client_secret', '');
+
+        $this->get(route('login.google.redirect'))
+            ->assertRedirect(route('login'));
+
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee('Google login belum aktif');
     }
 
     public function test_otp_login_flow_still_works(): void

@@ -415,6 +415,18 @@
             box-shadow: 0 12px 22px -18px rgba(249, 115, 22, 0.5);
         }
 
+        .method-link:disabled {
+            cursor: not-allowed;
+            opacity: 0.48;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .method-link:disabled:hover {
+            border-color: #f2d8c8;
+            color: #344054;
+        }
+
         .method-link.email-method {
             color: #f97316;
         }

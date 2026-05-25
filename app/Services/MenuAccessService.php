@@ -210,20 +210,6 @@ class MenuAccessService
 
     public function sidebarMenusForLevel(int $level): array
     {
-        if ($level === 3) {
-            return collect(self::MENU_DEFINITIONS)
-                ->map(function (array $definition, string $menuKey) {
-                    return [
-                        'key' => $menuKey,
-                        'label' => $this->sidebarLabel($menuKey),
-                        'icon' => $definition['icon'],
-                        'route' => $definition['route'],
-                    ];
-                })
-                ->values()
-                ->all();
-        }
-
         $permissions = $this->permissionMatrix();
         $menus = [];
 
@@ -240,16 +226,6 @@ class MenuAccessService
             ];
         }
 
-        if (in_array($level, [3, 4], true) && ! collect($menus)->contains('key', 'catatan_aktivitas')) {
-            $definition = self::MENU_DEFINITIONS['catatan_aktivitas'];
-            $menus[] = [
-                'key' => 'catatan_aktivitas',
-                'label' => $this->sidebarLabel('catatan_aktivitas'),
-                'icon' => $definition['icon'],
-                'route' => $definition['route'],
-            ];
-        }
-
         return $menus;
     }
 
@@ -259,19 +235,11 @@ class MenuAccessService
             return true;
         }
 
-        if ($level === 3 && array_key_exists($menuKey, self::MENU_DEFINITIONS)) {
-            return true;
-        }
-
         if ($level === 3 && $menuKey === 'hak_akses') {
             return true;
         }
 
         if ($level === 3 && $menuKey === 'database_tools') {
-            return true;
-        }
-
-        if ($menuKey === 'catatan_aktivitas' && in_array($level, [3, 4], true)) {
             return true;
         }
 
@@ -293,10 +261,6 @@ class MenuAccessService
                 ->unique()
                 ->values()
                 ->all();
-
-            if ($levelId === 3) {
-                $selectedMenus = array_values(array_unique(array_merge($selectedMenus, array_keys(self::MENU_DEFINITIONS))));
-            }
 
             if ($levelId === 3 && ! in_array('hak_akses', $selectedMenus, true)) {
                 $selectedMenus[] = 'hak_akses';
